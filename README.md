@@ -2,6 +2,8 @@
 
 May the Lord have mercy upon my soul.
 
+Minimal C++ wrapper around `libghostty-vt`.
+
 ## Building
 
 Requirements:

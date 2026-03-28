@@ -2,12 +2,13 @@ cmake_minimum_required(VERSION 3.19)
 
 project(
   libghostty_cpp
-  CXX
+  LANGUAGES C CXX
 )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
 
@@ -23,4 +24,40 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ghostty)
 
-# Bindings will be added here later.
+add_library(
+  libghostty_cpp
+  src/c_compat/vt.c
+  src/vt.cpp
+)
+
+target_sources(
+  libghostty_cpp
+  PUBLIC
+    include/libghostty_cpp/vt.hpp
+)
+
+target_compile_features(libghostty_cpp PUBLIC cxx_std_17)
+
+target_include_directories(
+  libghostty_cpp
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${ghostty_SOURCE_DIR}/include
+)
+
+target_link_libraries(libghostty_cpp PUBLIC ghostty-vt)
+
+install(
+  TARGETS libghostty_cpp
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(
+  DIRECTORY include/
+  DESTINATION include
+)
