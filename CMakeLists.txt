@@ -6,6 +6,8 @@ project(
 )
 
 include(CTest)
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
@@ -37,7 +39,7 @@ add_library(
 
 target_sources(
   libghostty_cpp
-  PUBLIC
+  PRIVATE
     include/libghostty_cpp/error.hpp
     include/libghostty_cpp/render.hpp
     include/libghostty_cpp/vt.hpp
@@ -55,7 +57,15 @@ target_include_directories(
     ${ghostty_SOURCE_DIR}/include
 )
 
-target_link_libraries(libghostty_cpp PUBLIC ghostty-vt)
+target_link_libraries(
+  libghostty_cpp
+  PUBLIC
+    $<BUILD_INTERFACE:ghostty-vt>
+    $<INSTALL_INTERFACE:ghostty-vt::ghostty-vt>
+)
+
+set(libghostty_cpp_install_cmakedir
+    "${CMAKE_INSTALL_LIBDIR}/cmake/libghostty_cpp")
 
 if(BUILD_TESTING)
   add_executable(
@@ -73,12 +83,32 @@ endif()
 
 install(
   TARGETS libghostty_cpp
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
+  EXPORT libghostty_cppTargets
+  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 install(
   DIRECTORY include/
-  DESTINATION include
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+configure_package_config_file(
+  cmake/libghostty_cpp-config.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/libghostty_cpp-config.cmake
+  INSTALL_DESTINATION ${libghostty_cpp_install_cmakedir}
+)
+
+install(
+  FILES ${CMAKE_CURRENT_BINARY_DIR}/libghostty_cpp-config.cmake
+  DESTINATION ${libghostty_cpp_install_cmakedir}
+)
+
+install(
+  EXPORT libghostty_cppTargets
+  FILE libghostty_cppTargets.cmake
+  NAMESPACE libghostty_cpp::
+  DESTINATION ${libghostty_cpp_install_cmakedir}
 )

@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(ghostty-vt CONFIG REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/libghostty_cppTargets.cmake")
+
+check_required_components(libghostty_cpp)
