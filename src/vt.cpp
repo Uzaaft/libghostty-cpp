@@ -1,64 +1,23 @@
 #include "libghostty_cpp/vt.hpp"
 
 #include "c_compat/vt.h"
+#include "result.hpp"
 
-#include <optional>
 #include <utility>
 
 namespace libghostty_cpp {
 
 namespace {
 
-const char* error_message(ErrorCode code) noexcept {
-  switch (code) {
-    case ErrorCode::OutOfMemory:
-      return "libghostty: out of memory";
-    case ErrorCode::InvalidValue:
-      return "libghostty: invalid value";
-    case ErrorCode::OutOfSpace:
-      return "libghostty: out of space";
-  }
-
-  return "libghostty: unknown error";
-}
-
-std::optional<ErrorCode> error_code_from_result(libghostty_cpp_result result) noexcept {
-  switch (result) {
-    case LIBGHOSTTY_CPP_RESULT_SUCCESS:
-      return std::nullopt;
-    case LIBGHOSTTY_CPP_RESULT_OUT_OF_MEMORY:
-      return ErrorCode::OutOfMemory;
-    case LIBGHOSTTY_CPP_RESULT_INVALID_VALUE:
-      return ErrorCode::InvalidValue;
-    case LIBGHOSTTY_CPP_RESULT_OUT_OF_SPACE:
-      return ErrorCode::OutOfSpace;
-  }
-
-  return ErrorCode::InvalidValue;
-}
-
-void throw_if_error(libghostty_cpp_result result) {
-  if (const auto error_code = error_code_from_result(result)) {
-    throw Error(*error_code);
-  }
-}
-
 using TerminalU16Getter = libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint16_t*);
 
 std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter getter) {
   std::uint16_t value = 0;
-  throw_if_error(getter(handle, &value));
+  detail::throw_if_error(getter(handle, &value));
   return value;
 }
 
 }  // namespace
-
-Error::Error(ErrorCode code)
-    : std::runtime_error(error_message(code)), code_(code) {}
-
-ErrorCode Error::code() const noexcept {
-  return code_;
-}
 
 Terminal::Terminal(TerminalOptions options) {
   libghostty_cpp_terminal_options raw_options = {};
@@ -67,7 +26,7 @@ Terminal::Terminal(TerminalOptions options) {
   raw_options.max_scrollback = options.max_scrollback;
 
   libghostty_cpp_terminal* handle = nullptr;
-  throw_if_error(libghostty_cpp_terminal_new(&handle, raw_options));
+  detail::throw_if_error(libghostty_cpp_terminal_new(&handle, raw_options));
   handle_ = handle;
 }
 
@@ -105,7 +64,7 @@ void Terminal::resize(
   std::uint32_t cell_width_px,
   std::uint32_t cell_height_px
 ) {
-  throw_if_error(libghostty_cpp_terminal_resize(
+  detail::throw_if_error(libghostty_cpp_terminal_resize(
     handle_,
     cols,
     rows,

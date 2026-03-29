@@ -1,27 +1,8 @@
 #include "c_compat/vt.h"
 
-#include <ghostty/vt.h>
+#include "c_compat/internal.h"
 
 #include <stdlib.h>
-
-struct libghostty_cpp_terminal {
-  GhosttyTerminal inner;
-};
-
-static libghostty_cpp_result translate_result(GhosttyResult result) {
-  switch (result) {
-    case GHOSTTY_SUCCESS:
-      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
-    case GHOSTTY_OUT_OF_MEMORY:
-      return LIBGHOSTTY_CPP_RESULT_OUT_OF_MEMORY;
-    case GHOSTTY_INVALID_VALUE:
-      return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
-    case GHOSTTY_OUT_OF_SPACE:
-      return LIBGHOSTTY_CPP_RESULT_OUT_OF_SPACE;
-  }
-
-  return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
-}
 
 static libghostty_cpp_result get_u16(
   const libghostty_cpp_terminal* terminal,
@@ -32,7 +13,9 @@ static libghostty_cpp_result get_u16(
     return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
   }
 
-  return translate_result(ghostty_terminal_get(terminal->inner, data, out_value));
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, data, out_value)
+  );
 }
 
 libghostty_cpp_result libghostty_cpp_terminal_new(
@@ -62,7 +45,7 @@ libghostty_cpp_result libghostty_cpp_terminal_new(
 
   if (result != GHOSTTY_SUCCESS) {
     free(wrapper);
-    return translate_result(result);
+    return libghostty_cpp_translate_result(result);
   }
 
   *terminal = wrapper;
@@ -113,7 +96,7 @@ libghostty_cpp_result libghostty_cpp_terminal_resize(
     return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
   }
 
-  return translate_result(ghostty_terminal_resize(
+  return libghostty_cpp_translate_result(ghostty_terminal_resize(
     terminal->inner,
     cols,
     rows,

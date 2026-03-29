@@ -2,28 +2,13 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <stdexcept>
 #include <string_view>
+
+#include "libghostty_cpp/error.hpp"
 
 struct libghostty_cpp_terminal;
 
 namespace libghostty_cpp {
-
-enum class ErrorCode {
-  OutOfMemory,
-  InvalidValue,
-  OutOfSpace,
-};
-
-class Error : public std::runtime_error {
-public:
-  explicit Error(ErrorCode code);
-
-  [[nodiscard]] ErrorCode code() const noexcept;
-
-private:
-  ErrorCode code_;
-};
 
 struct TerminalOptions {
   std::uint16_t cols;
