@@ -10,6 +10,8 @@ struct libghostty_cpp_terminal;
 
 namespace libghostty_cpp {
 
+class RenderState;
+
 struct TerminalOptions {
   std::uint16_t cols;
   std::uint16_t rows;
@@ -39,6 +41,8 @@ public:
   [[nodiscard]] std::uint16_t cursor_y() const;
 
 private:
+  friend class RenderState;
+
   void release() noexcept;
 
   libghostty_cpp_terminal *handle_ = nullptr;

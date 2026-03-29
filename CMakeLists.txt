@@ -26,8 +26,10 @@ FetchContent_MakeAvailable(ghostty)
 
 add_library(
   libghostty_cpp
+  src/c_compat/render.c
   src/c_compat/vt.c
   src/error.cpp
+  src/render.cpp
   src/vt.cpp
 )
 
@@ -35,6 +37,7 @@ target_sources(
   libghostty_cpp
   PUBLIC
     include/libghostty_cpp/error.hpp
+    include/libghostty_cpp/render.hpp
     include/libghostty_cpp/vt.hpp
 )
 
