@@ -5,6 +5,8 @@ project(
   LANGUAGES C CXX
 )
 
+include(CTest)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -54,6 +56,20 @@ target_include_directories(
 )
 
 target_link_libraries(libghostty_cpp PUBLIC ghostty-vt)
+
+if(BUILD_TESTING)
+  add_executable(
+    libghostty_cpp_render_smoke_test
+    tests/render_smoke.cpp
+  )
+
+  target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
+
+  add_test(
+    NAME libghostty_cpp_render_smoke_test
+    COMMAND libghostty_cpp_render_smoke_test
+  )
+endif()
 
 install(
   TARGETS libghostty_cpp
