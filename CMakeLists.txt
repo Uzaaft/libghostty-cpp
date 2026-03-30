@@ -73,11 +73,22 @@ if(BUILD_TESTING)
     tests/render_smoke.cpp
   )
 
+  add_executable(
+    libghostty_cpp_vt_callbacks_test
+    tests/vt_callbacks.cpp
+  )
+
   target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
+  target_link_libraries(libghostty_cpp_vt_callbacks_test PRIVATE libghostty_cpp)
 
   add_test(
     NAME libghostty_cpp_render_smoke_test
     COMMAND libghostty_cpp_render_smoke_test
+  )
+
+  add_test(
+    NAME libghostty_cpp_vt_callbacks_test
+    COMMAND libghostty_cpp_vt_callbacks_test
   )
 endif()
 
