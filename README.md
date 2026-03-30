@@ -4,6 +4,13 @@ May the Lord have mercy upon my soul.
 
 Minimal C++ wrapper around `libghostty-vt`.
 
+Current wrapper coverage:
+
+- `Terminal` basics, resize, cursor queries, and effect callbacks
+- `RenderState` basics for render metadata, colors, dirty tracking, and row/cell traversal
+- `key` encoder and key event wrappers for VT input encoding
+- `mouse` encoder and mouse event wrappers for VT mouse encoding
+
 ## Building
 
 Requirements:

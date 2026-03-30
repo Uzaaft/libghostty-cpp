@@ -19,6 +19,14 @@ namespace detail {
 struct TerminalCallbacks;
 }
 
+namespace key {
+class Encoder;
+}
+
+namespace mouse {
+class Encoder;
+}
+
 class RenderState;
 class Terminal;
 
@@ -157,6 +165,8 @@ public:
 
 private:
   friend class RenderState;
+  friend class key::Encoder;
+  friend class mouse::Encoder;
   friend struct detail::TerminalCallbacks;
 
   void release() noexcept;

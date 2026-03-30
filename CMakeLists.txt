@@ -30,9 +30,13 @@ FetchContent_MakeAvailable(ghostty)
 
 add_library(
   libghostty_cpp
+  src/c_compat/key.c
+  src/c_compat/mouse.c
   src/c_compat/render.c
   src/c_compat/vt.c
   src/error.cpp
+  src/key.cpp
+  src/mouse.cpp
   src/render.cpp
   src/vt.cpp
 )
@@ -41,6 +45,8 @@ target_sources(
   libghostty_cpp
   PRIVATE
     include/libghostty_cpp/error.hpp
+    include/libghostty_cpp/key.hpp
+    include/libghostty_cpp/mouse.hpp
     include/libghostty_cpp/render.hpp
     include/libghostty_cpp/vt.hpp
 )
@@ -69,6 +75,16 @@ set(libghostty_cpp_install_cmakedir
 
 if(BUILD_TESTING)
   add_executable(
+    libghostty_cpp_key_smoke_test
+    tests/key_smoke.cpp
+  )
+
+  add_executable(
+    libghostty_cpp_mouse_smoke_test
+    tests/mouse_smoke.cpp
+  )
+
+  add_executable(
     libghostty_cpp_render_smoke_test
     tests/render_smoke.cpp
   )
@@ -78,8 +94,20 @@ if(BUILD_TESTING)
     tests/vt_callbacks.cpp
   )
 
+  target_link_libraries(libghostty_cpp_key_smoke_test PRIVATE libghostty_cpp)
+  target_link_libraries(libghostty_cpp_mouse_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_callbacks_test PRIVATE libghostty_cpp)
+
+  add_test(
+    NAME libghostty_cpp_key_smoke_test
+    COMMAND libghostty_cpp_key_smoke_test
+  )
+
+  add_test(
+    NAME libghostty_cpp_mouse_smoke_test
+    COMMAND libghostty_cpp_mouse_smoke_test
+  )
 
   add_test(
     NAME libghostty_cpp_render_smoke_test
