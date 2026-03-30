@@ -34,6 +34,8 @@
             pkgs.ninja
             pkgs.pinact
             pkgs.pkg-config
+            pkgs.qt6.qtbase
+            pkgs.qt6.qtwayland
             pkgs.scc
           ]
           ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [

@@ -73,6 +73,53 @@ target_link_libraries(
 set(libghostty_cpp_install_cmakedir
     "${CMAKE_INSTALL_LIBDIR}/cmake/libghostty_cpp")
 
+option(
+  LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP
+  "Build the ghostling_cpp Qt Widgets tech demo"
+  ON
+)
+
+if(LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP AND UNIX)
+  find_package(Qt6 COMPONENTS Core Gui Widgets QUIET)
+
+  if(Qt6_FOUND)
+    add_executable(
+      ghostling_cpp
+      example/ghostling_cpp/main.cpp
+    )
+
+    target_link_libraries(
+      ghostling_cpp
+      PRIVATE
+        libghostty_cpp
+        Qt6::Core
+        Qt6::Gui
+        Qt6::Widgets
+    )
+
+    find_library(libghostty_cpp_util_library util)
+    if(libghostty_cpp_util_library)
+      target_link_libraries(ghostling_cpp PRIVATE ${libghostty_cpp_util_library})
+    endif()
+
+    add_custom_command(
+      TARGET ghostling_cpp
+      POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${CMAKE_CURRENT_SOURCE_DIR}/example/ghostling_cpp/fonts/JetBrainsMono-Medium.ttf
+              $<TARGET_FILE_DIR:ghostling_cpp>/JetBrainsMono-Medium.ttf
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${CMAKE_CURRENT_SOURCE_DIR}/example/ghostling_cpp/fonts/JetBrainsMono-Regular.ttf
+              $<TARGET_FILE_DIR:ghostling_cpp>/JetBrainsMono-Regular.ttf
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              ${CMAKE_CURRENT_SOURCE_DIR}/example/ghostling_cpp/fonts/OFL.txt
+              $<TARGET_FILE_DIR:ghostling_cpp>/OFL.txt
+    )
+  else()
+    message(STATUS "Skipping ghostling_cpp: Qt6 Core/Gui/Widgets not found")
+  endif()
+endif()
+
 if(BUILD_TESTING)
   add_executable(
     libghostty_cpp_key_smoke_test
