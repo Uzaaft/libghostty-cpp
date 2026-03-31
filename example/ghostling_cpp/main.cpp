@@ -5,12 +5,15 @@
 
 #include <QApplication>
 #include <QByteArray>
+#include <QClipboard>
 #include <QColor>
 #include <QCoreApplication>
+#include <QFocusEvent>
 #include <QFont>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
@@ -60,6 +63,10 @@ constexpr double kRowGap = 2.0;
 constexpr std::size_t kScrollbackLines = 1000;
 constexpr std::size_t kEncodedInputReserve = 64;
 constexpr double kWheelScrollScale = -2.5;
+constexpr std::string_view kBracketedPasteStartSequence = "\x1B[200~";
+constexpr std::string_view kBracketedPasteEndSequence = "\x1B[201~";
+constexpr std::string_view kFocusGainedSequence = "\x1B[I";
+constexpr std::string_view kFocusLostSequence = "\x1B[O";
 constexpr int kInitialWindowWidth = 1024;
 constexpr int kInitialWindowHeight = 720;
 
@@ -394,6 +401,26 @@ protected:
     QWidget::keyPressEvent(event);
   }
 
+  void focusInEvent(QFocusEvent* event) override {
+    try {
+      report_focus(true);
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+    }
+
+    QWidget::focusInEvent(event);
+  }
+
+  void focusOutEvent(QFocusEvent* event) override {
+    try {
+      report_focus(false);
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+    }
+
+    QWidget::focusOutEvent(event);
+  }
+
   void mousePressEvent(QMouseEvent* event) override {
     setFocus(Qt::MouseFocusReason);
 
@@ -457,6 +484,14 @@ protected:
   }
 
 private:
+  [[nodiscard]] bool has_active_pty() const noexcept {
+    return pty_fd_ >= 0;
+  }
+
+  [[nodiscard]] bool is_mode_enabled(libghostty_cpp::Mode mode) const {
+    return terminal_.is_mode_enabled(mode);
+  }
+
   void handle_input_error(const std::exception& error) {
     paint_error_frame_ = QString::fromUtf8(error.what());
     update();
@@ -872,6 +907,67 @@ private:
     };
   }
 
+  [[nodiscard]] bool is_mouse_tracking_enabled() const {
+    using libghostty_cpp::Mode;
+
+    return is_mode_enabled(Mode::X10Mouse)
+           || is_mode_enabled(Mode::NormalMouse)
+           || is_mode_enabled(Mode::ButtonMouse)
+           || is_mode_enabled(Mode::AnyMouse);
+  }
+
+  [[nodiscard]] bool is_bracketed_paste_enabled() const {
+    return is_mode_enabled(libghostty_cpp::Mode::BracketedPaste);
+  }
+
+  void report_focus(bool focused) const {
+    if (!has_active_pty() || !is_mode_enabled(libghostty_cpp::Mode::FocusEvent)) {
+      return;
+    }
+
+    write_pty(focused ? kFocusGainedSequence : kFocusLostSequence);
+  }
+
+  void append_encoded_input(std::string_view data) {
+    encoded_input_.insert(encoded_input_.end(), data.begin(), data.end());
+  }
+
+  [[nodiscard]] bool handle_paste() {
+    if (!has_active_pty()) {
+      return false;
+    }
+
+    const QClipboard* clipboard = QApplication::clipboard();
+    if (clipboard == nullptr) {
+      return false;
+    }
+
+    const QString text = clipboard->text(QClipboard::Clipboard);
+    if (text.isEmpty()) {
+      return false;
+    }
+
+    const QByteArray utf8 = text.toUtf8();
+    if (utf8.isEmpty()) {
+      return false;
+    }
+
+    const bool bracketed_paste = is_bracketed_paste_enabled();
+
+    clear_encoded_input();
+    if (bracketed_paste) {
+      append_encoded_input(kBracketedPasteStartSequence);
+    }
+
+    encoded_input_.insert(encoded_input_.end(), utf8.begin(), utf8.end());
+
+    if (bracketed_paste) {
+      append_encoded_input(kBracketedPasteEndSequence);
+    }
+
+    return flush_encoded_input();
+  }
+
   void configure_mouse_input(
     const QPointF& position,
     Qt::KeyboardModifiers modifiers,
@@ -895,7 +991,7 @@ private:
     const QMouseEvent& event,
     libghostty_cpp::mouse::Action action
   ) {
-    if (pty_fd_ < 0) {
+    if (!has_active_pty()) {
       return false;
     }
 
@@ -914,7 +1010,7 @@ private:
   }
 
   [[nodiscard]] bool handle_mouse_move(const QMouseEvent& event) {
-    if (pty_fd_ < 0) {
+    if (!has_active_pty()) {
       return false;
     }
 
@@ -929,7 +1025,7 @@ private:
   }
 
   [[nodiscard]] bool handle_wheel(const QWheelEvent& event) {
-    if (pty_fd_ < 0) {
+    if (!has_active_pty()) {
       return false;
     }
 
@@ -942,17 +1038,17 @@ private:
                                                          ? libghostty_cpp::mouse::Button::Four
                                                          : libghostty_cpp::mouse::Button::Five;
 
-    configure_mouse_input(event.position(), event.modifiers(), event.buttons());
+    if (is_mouse_tracking_enabled()) {
+      configure_mouse_input(event.position(), event.modifiers(), event.buttons());
 
-    clear_encoded_input();
-    mouse_event_.set_button(scroll_button).set_action(libghostty_cpp::mouse::Action::Press);
-    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+      clear_encoded_input();
+      mouse_event_.set_button(scroll_button).set_action(libghostty_cpp::mouse::Action::Press);
+      mouse_encoder_.encode_to(encoded_input_, mouse_event_);
 
-    mouse_event_.set_action(libghostty_cpp::mouse::Action::Release);
-    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+      mouse_event_.set_action(libghostty_cpp::mouse::Action::Release);
+      mouse_encoder_.encode_to(encoded_input_, mouse_event_);
 
-    if (flush_encoded_input()) {
-      return true;
+      return flush_encoded_input();
     }
 
     std::ptrdiff_t scroll_delta =
@@ -967,8 +1063,12 @@ private:
   }
 
   [[nodiscard]] bool handle_key_press(const QKeyEvent& event) {
-    if (pty_fd_ < 0) {
+    if (!has_active_pty()) {
       return false;
+    }
+
+    if (event.matches(QKeySequence::Paste)) {
+      return handle_paste();
     }
 
     const std::optional<KeyMapping> mapping = map_qt_key(event.key());
