@@ -620,3 +620,10 @@ libghostty_cpp_result libghostty_cpp_terminal_title(
 ) {
   return get_string(terminal, GHOSTTY_TERMINAL_DATA_TITLE, out_title);
 }
+
+libghostty_cpp_result libghostty_cpp_terminal_pwd(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_string* out_pwd
+) {
+  return get_string(terminal, GHOSTTY_TERMINAL_DATA_PWD, out_pwd);
+}

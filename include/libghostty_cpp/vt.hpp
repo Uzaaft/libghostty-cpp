@@ -213,8 +213,9 @@ public:
   Terminal &on_title_changed(TitleChangedCallback callback);
   Terminal &on_color_scheme(ColorSchemeCallback callback);
 
-  // Returned view is invalidated by the next vt_write() or reset().
+  // Returned views are invalidated by the next vt_write() or reset().
   [[nodiscard]] std::string_view title() const;
+  [[nodiscard]] std::string_view pwd() const;
   [[nodiscard]] std::uint16_t cols() const;
   [[nodiscard]] std::uint16_t rows() const;
   [[nodiscard]] std::uint16_t cursor_x() const;

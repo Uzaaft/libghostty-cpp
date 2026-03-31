@@ -85,6 +85,7 @@ int main() {
   Terminal moved_terminal(std::move(terminal));
   tracker.expected_terminal = &moved_terminal;
   assert(moved_terminal.title().empty());
+  assert(moved_terminal.pwd().empty());
 
   moved_terminal.vt_write("\x07");
   assert(tracker.bell_calls == 1);

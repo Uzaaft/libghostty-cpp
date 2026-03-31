@@ -201,6 +201,11 @@ libghostty_cpp_result libghostty_cpp_terminal_title(
   libghostty_cpp_string* out_title
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_pwd(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_string* out_pwd
+);
+
 #ifdef __cplusplus
 }
 #endif

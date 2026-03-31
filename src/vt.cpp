@@ -531,6 +531,10 @@ std::string_view Terminal::title() const {
   return get_string(handle_, libghostty_cpp_terminal_title);
 }
 
+std::string_view Terminal::pwd() const {
+  return get_string(handle_, libghostty_cpp_terminal_pwd);
+}
+
 std::uint16_t Terminal::cols() const {
   return get_u16(handle_, libghostty_cpp_terminal_cols);
 }
