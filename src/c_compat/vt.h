@@ -137,6 +137,12 @@ void libghostty_cpp_terminal_vt_write(
 
 void libghostty_cpp_terminal_reset(libghostty_cpp_terminal* terminal);
 
+libghostty_cpp_result libghostty_cpp_terminal_mode_get(
+  const libghostty_cpp_terminal* terminal,
+  uint16_t mode,
+  bool* out_value
+);
+
 void libghostty_cpp_terminal_scroll_viewport_delta(
   libghostty_cpp_terminal* terminal,
   ptrdiff_t delta

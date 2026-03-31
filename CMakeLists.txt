@@ -141,10 +141,16 @@ if(BUILD_TESTING)
     tests/vt_callbacks.cpp
   )
 
+  add_executable(
+    libghostty_cpp_vt_modes_test
+    tests/vt_modes.cpp
+  )
+
   target_link_libraries(libghostty_cpp_key_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_mouse_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_callbacks_test PRIVATE libghostty_cpp)
+  target_link_libraries(libghostty_cpp_vt_modes_test PRIVATE libghostty_cpp)
 
   add_test(
     NAME libghostty_cpp_key_smoke_test
@@ -164,6 +170,11 @@ if(BUILD_TESTING)
   add_test(
     NAME libghostty_cpp_vt_callbacks_test
     COMMAND libghostty_cpp_vt_callbacks_test
+  )
+
+  add_test(
+    NAME libghostty_cpp_vt_modes_test
+    COMMAND libghostty_cpp_vt_modes_test
   )
 endif()
 

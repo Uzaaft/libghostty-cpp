@@ -441,6 +441,20 @@ void libghostty_cpp_terminal_reset(libghostty_cpp_terminal* terminal) {
   ghostty_terminal_reset(terminal->inner);
 }
 
+libghostty_cpp_result libghostty_cpp_terminal_mode_get(
+  const libghostty_cpp_terminal* terminal,
+  uint16_t mode,
+  bool* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_mode_get(terminal->inner, mode, out_value)
+  );
+}
+
 void libghostty_cpp_terminal_scroll_viewport_delta(
   libghostty_cpp_terminal* terminal,
   ptrdiff_t delta

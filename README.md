@@ -6,7 +6,7 @@ Minimal C++ wrapper around `libghostty-vt`.
 
 Current wrapper coverage:
 
-- `Terminal` basics, resize, cursor queries, and effect callbacks
+- `Terminal` basics, resize, cursor and mode queries, viewport scrolling, and effect callbacks
 - `RenderState` basics for render metadata, colors, dirty tracking, and row/cell traversal
 - `key` encoder and key event wrappers for VT input encoding
 - `mouse` encoder and mouse event wrappers for VT mouse encoding

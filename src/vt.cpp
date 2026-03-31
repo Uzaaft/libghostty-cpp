@@ -71,6 +71,14 @@ std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter g
   return value;
 }
 
+bool query_mode_enabled(const libghostty_cpp_terminal* handle, Mode mode) {
+  bool value = false;
+  detail::throw_if_error(
+    libghostty_cpp_terminal_mode_get(handle, static_cast<std::uint16_t>(mode), &value)
+  );
+  return value;
+}
+
 libghostty_cpp_size_report_size translate_size_report_size(
   const SizeReportSize& size
 ) noexcept {
@@ -344,6 +352,10 @@ void Terminal::vt_write(std::string_view data) {
 
 void Terminal::reset() noexcept {
   libghostty_cpp_terminal_reset(handle_);
+}
+
+bool Terminal::is_mode_enabled(Mode mode) const {
+  return query_mode_enabled(handle_, mode);
 }
 
 void Terminal::scroll_viewport_delta(std::ptrdiff_t delta) noexcept {
