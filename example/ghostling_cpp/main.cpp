@@ -270,6 +270,22 @@ struct KeyMapping {
   return event.text().toUtf8();
 }
 
+[[nodiscard]] Qt::KeyboardModifiers relevant_keyboard_modifiers(
+  Qt::KeyboardModifiers modifiers
+) {
+  return modifiers
+         & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+}
+
+[[nodiscard]] bool is_shift_insert_paste(const QKeyEvent& event) {
+  return event.key() == Qt::Key_Insert
+         && relevant_keyboard_modifiers(event.modifiers()) == Qt::ShiftModifier;
+}
+
+[[nodiscard]] bool is_paste_shortcut(const QKeyEvent& event) {
+  return event.matches(QKeySequence::Paste) || is_shift_insert_paste(event);
+}
+
 [[nodiscard]] std::optional<libghostty_cpp::mouse::Button> map_qt_mouse_button(
   Qt::MouseButton button
 ) {
@@ -399,6 +415,21 @@ protected:
     }
 
     QWidget::keyPressEvent(event);
+  }
+
+  void keyReleaseEvent(QKeyEvent* event) override {
+    try {
+      if (handle_key_release(*event)) {
+        event->accept();
+        return;
+      }
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+      event->accept();
+      return;
+    }
+
+    QWidget::keyReleaseEvent(event);
   }
 
   void focusInEvent(QFocusEvent* event) override {
@@ -1062,22 +1093,23 @@ private:
     return true;
   }
 
-  [[nodiscard]] bool handle_key_press(const QKeyEvent& event) {
+  [[nodiscard]] bool handle_key_event(
+    const QKeyEvent& event,
+    libghostty_cpp::key::Action action,
+    bool allow_text_fallback
+  ) {
+    using libghostty_cpp::key::Mods;
+
     if (!has_active_pty()) {
       return false;
     }
 
-    if (event.matches(QKeySequence::Paste)) {
-      return handle_paste();
-    }
-
     const std::optional<KeyMapping> mapping = map_qt_key(event.key());
-    const QByteArray utf8 = encoder_utf8_text(event);
+    const QByteArray utf8 = action == libghostty_cpp::key::Action::Release
+                              ? QByteArray{}
+                              : encoder_utf8_text(event);
 
     if (mapping.has_value()) {
-      using libghostty_cpp::key::Action;
-      using libghostty_cpp::key::Mods;
-
       Mods consumed_mods = Mods::None;
       if (!utf8.isEmpty() && event.modifiers().testFlag(Qt::ShiftModifier)
           && mapping->unshifted_codepoint != U'\0') {
@@ -1085,7 +1117,7 @@ private:
       }
 
       key_event_
-        .set_action(event.isAutoRepeat() ? Action::Repeat : Action::Press)
+        .set_action(action)
         .set_key(mapping->key)
         .set_mods(to_ghostty_mods(event.modifiers()))
         .set_consumed_mods(consumed_mods)
@@ -1104,13 +1136,49 @@ private:
       return true;
     }
 
-    if (!has_text_modifiers(event.modifiers()) && is_printable_text(event.text())) {
+    if (allow_text_fallback && !has_text_modifiers(event.modifiers())
+        && is_printable_text(event.text())) {
       const QByteArray text = event.text().toUtf8();
       write_pty(std::string_view(text.constData(), text.size()));
       return true;
     }
 
     return false;
+  }
+
+  [[nodiscard]] bool handle_key_press(const QKeyEvent& event) {
+    using libghostty_cpp::key::Action;
+
+    if (is_paste_shortcut(event)) {
+      if (!event.isAutoRepeat()) {
+        suppressed_key_release_ = event.key();
+        static_cast<void>(handle_paste());
+      }
+
+      return true;
+    }
+
+    return handle_key_event(
+      event,
+      event.isAutoRepeat() ? Action::Repeat : Action::Press,
+      true
+    );
+  }
+
+  [[nodiscard]] bool handle_key_release(const QKeyEvent& event) {
+    if (suppressed_key_release_.has_value() && *suppressed_key_release_ == event.key()) {
+      if (!event.isAutoRepeat()) {
+        suppressed_key_release_.reset();
+      }
+
+      return true;
+    }
+
+    if (event.isAutoRepeat()) {
+      return true;
+    }
+
+    return handle_key_event(event, libghostty_cpp::key::Action::Release, false);
   }
 
   QFont terminal_font_;
@@ -1125,6 +1193,7 @@ private:
   libghostty_cpp::mouse::Encoder mouse_encoder_;
   libghostty_cpp::mouse::Event mouse_event_;
   std::vector<std::uint8_t> encoded_input_;
+  std::optional<int> suppressed_key_release_;
   int pty_fd_ = -1;
   pid_t child_pid_ = -1;
   std::unique_ptr<QSocketNotifier> socket_notifier_;
