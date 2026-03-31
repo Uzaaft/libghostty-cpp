@@ -14,9 +14,11 @@ namespace detail {
 struct TerminalCallbacks {
   Terminal* owner = nullptr;
   PtyWriteCallback pty_write;
+  BellCallback bell;
   SizeCallback size;
   DeviceAttributesCallback device_attributes;
   XtversionCallback xtversion;
+  TitleChangedCallback title_changed;
   ColorSchemeCallback color_scheme;
   std::string xtversion_storage;
   std::exception_ptr pending_exception;
@@ -64,11 +66,30 @@ namespace {
 
 using TerminalU16Getter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint16_t*);
+using TerminalStringGetter =
+  libghostty_cpp_result (*)(const libghostty_cpp_terminal*, libghostty_cpp_string*);
 
 std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter getter) {
   std::uint16_t value = 0;
   detail::throw_if_error(getter(handle, &value));
   return value;
+}
+
+std::string_view get_string(
+  const libghostty_cpp_terminal* handle,
+  TerminalStringGetter getter
+) {
+  libghostty_cpp_string value = {nullptr, 0};
+  detail::throw_if_error(getter(handle, &value));
+  if (value.data == nullptr) {
+    if (value.len != 0) {
+      throw Error(ErrorCode::InvalidValue);
+    }
+
+    return {};
+  }
+
+  return std::string_view(reinterpret_cast<const char*>(value.data), value.len);
 }
 
 bool query_mode_enabled(const libghostty_cpp_terminal* handle, Mode mode) {
@@ -155,6 +176,25 @@ void dispatch_pty_write(
 
   try {
     callbacks->pty_write(callbacks->terminal(handle), view);
+  } catch (...) {
+    callbacks->capture_current_exception();
+  }
+}
+
+void dispatch_bell(
+  const libghostty_cpp_terminal* handle,
+  void* userdata
+) {
+  detail::TerminalCallbacks* callbacks = get_callback_state(userdata);
+  if (callbacks == nullptr
+      || callbacks->pending_exception != nullptr
+      || !callbacks->bell
+      || !callbacks->has_owner(handle)) {
+    return;
+  }
+
+  try {
+    callbacks->bell(callbacks->terminal(handle));
   } catch (...) {
     callbacks->capture_current_exception();
   }
@@ -249,6 +289,25 @@ libghostty_cpp_string dispatch_xtversion(
     callbacks->capture_current_exception();
     callbacks->xtversion_storage.clear();
     return libghostty_cpp_string {nullptr, 0};
+  }
+}
+
+void dispatch_title_changed(
+  const libghostty_cpp_terminal* handle,
+  void* userdata
+) {
+  detail::TerminalCallbacks* callbacks = get_callback_state(userdata);
+  if (callbacks == nullptr
+      || callbacks->pending_exception != nullptr
+      || !callbacks->title_changed
+      || !callbacks->has_owner(handle)) {
+    return;
+  }
+
+  try {
+    callbacks->title_changed(callbacks->terminal(handle));
+  } catch (...) {
+    callbacks->capture_current_exception();
   }
 }
 
@@ -390,6 +449,19 @@ Terminal& Terminal::on_pty_write(PtyWriteCallback callback) {
   return *this;
 }
 
+Terminal& Terminal::on_bell(BellCallback callback) {
+  if (callbacks_ == nullptr) {
+    throw Error(ErrorCode::InvalidState);
+  }
+
+  callbacks_->bell = std::move(callback);
+  detail::throw_if_error(libghostty_cpp_terminal_on_bell(
+    handle_,
+    callbacks_->bell ? &dispatch_bell : nullptr
+  ));
+  return *this;
+}
+
 Terminal& Terminal::on_size(SizeCallback callback) {
   if (callbacks_ == nullptr) {
     throw Error(ErrorCode::InvalidState);
@@ -429,6 +501,19 @@ Terminal& Terminal::on_xtversion(XtversionCallback callback) {
   return *this;
 }
 
+Terminal& Terminal::on_title_changed(TitleChangedCallback callback) {
+  if (callbacks_ == nullptr) {
+    throw Error(ErrorCode::InvalidState);
+  }
+
+  callbacks_->title_changed = std::move(callback);
+  detail::throw_if_error(libghostty_cpp_terminal_on_title_changed(
+    handle_,
+    callbacks_->title_changed ? &dispatch_title_changed : nullptr
+  ));
+  return *this;
+}
+
 Terminal& Terminal::on_color_scheme(ColorSchemeCallback callback) {
   if (callbacks_ == nullptr) {
     throw Error(ErrorCode::InvalidState);
@@ -440,6 +525,10 @@ Terminal& Terminal::on_color_scheme(ColorSchemeCallback callback) {
     callbacks_->color_scheme ? &dispatch_color_scheme : nullptr
   ));
   return *this;
+}
+
+std::string_view Terminal::title() const {
+  return get_string(handle_, libghostty_cpp_terminal_title);
 }
 
 std::uint16_t Terminal::cols() const {

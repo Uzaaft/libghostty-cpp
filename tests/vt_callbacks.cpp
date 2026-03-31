@@ -20,9 +20,11 @@ int main() {
     std::vector<std::string> writes;
     const Terminal* expected_terminal = nullptr;
     std::size_t pty_write_calls = 0;
+    std::size_t bell_calls = 0;
     std::size_t size_calls = 0;
     std::size_t device_attributes_calls = 0;
     std::size_t xtversion_calls = 0;
+    std::size_t title_changed_calls = 0;
     std::size_t color_scheme_calls = 0;
   } tracker;
 
@@ -45,6 +47,10 @@ int main() {
       ++tracker.pty_write_calls;
       tracker.writes.emplace_back(data);
     })
+    .on_bell([&](const Terminal& callback_terminal) {
+      assert(&callback_terminal == tracker.expected_terminal);
+      ++tracker.bell_calls;
+    })
     .on_size([&](const Terminal& callback_terminal)
                -> std::optional<SizeReportSize> {
       assert(&callback_terminal == tracker.expected_terminal);
@@ -65,6 +71,10 @@ int main() {
       ++tracker.xtversion_calls;
       return std::string("libghostty-cpp test");
     })
+    .on_title_changed([&](const Terminal& callback_terminal) {
+      assert(&callback_terminal == tracker.expected_terminal);
+      ++tracker.title_changed_calls;
+    })
     .on_color_scheme([&](const Terminal& callback_terminal)
                         -> std::optional<ColorScheme> {
       assert(&callback_terminal == tracker.expected_terminal);
@@ -74,6 +84,10 @@ int main() {
 
   Terminal moved_terminal(std::move(terminal));
   tracker.expected_terminal = &moved_terminal;
+  assert(moved_terminal.title().empty());
+
+  moved_terminal.vt_write("\x07");
+  assert(tracker.bell_calls == 1);
 
   moved_terminal.vt_write("\x1B[?7$p");
   assert(tracker.writes.back() == "\x1B[?7;1$y");
@@ -96,10 +110,16 @@ int main() {
   moved_terminal.vt_write("\x1B[?996n");
   assert(tracker.writes.back() == "\x1B[?997;1n");
 
+  moved_terminal.vt_write("\x1B]2;ghostling-cpp test\x1B\\");
+  assert(tracker.title_changed_calls == 1);
+  assert(moved_terminal.title() == "ghostling-cpp test");
+
   assert(tracker.pty_write_calls == tracker.writes.size());
+  assert(tracker.bell_calls == 1);
   assert(tracker.size_calls == 1);
   assert(tracker.device_attributes_calls == 3);
   assert(tracker.xtversion_calls == 1);
+  assert(tracker.title_changed_calls == 1);
   assert(tracker.color_scheme_calls == 1);
 
   std::size_t size_throw_calls = 0;
@@ -126,6 +146,30 @@ int main() {
   assert(threw);
   assert(size_throw_calls == 1);
   assert(color_scheme_after_throw_calls == 0);
+
+  std::size_t bell_throw_calls = 0;
+  std::size_t title_changed_after_throw_calls = 0;
+
+  Terminal signal_exception_terminal(TerminalOptions{80, 24, 0});
+  signal_exception_terminal
+    .on_bell([&](const Terminal&) {
+      ++bell_throw_calls;
+      throw std::runtime_error("bell callback failed");
+    })
+    .on_title_changed([&](const Terminal&) {
+      ++title_changed_after_throw_calls;
+    });
+
+  threw = false;
+  try {
+    signal_exception_terminal.vt_write("\x07\x1B]2;ignored\x1B\\");
+  } catch (const std::runtime_error& error) {
+    threw = std::string_view(error.what()) == "bell callback failed";
+  }
+
+  assert(threw);
+  assert(bell_throw_calls == 1);
+  assert(title_changed_after_throw_calls == 0);
 
   return 0;
 }

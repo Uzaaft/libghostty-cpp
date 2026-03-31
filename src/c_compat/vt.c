@@ -33,9 +33,11 @@ static libghostty_cpp_result set_terminal_option(
 typedef union libghostty_cpp_terminal_option_value {
   const void* value;
   GhosttyTerminalWritePtyFn pty_write;
+  GhosttyTerminalBellFn bell;
   GhosttyTerminalSizeFn size;
   GhosttyTerminalDeviceAttributesFn device_attributes;
   GhosttyTerminalXtversionFn xtversion;
+  GhosttyTerminalTitleChangedFn title_changed;
   GhosttyTerminalColorSchemeFn color_scheme;
 } libghostty_cpp_terminal_option_value;
 
@@ -44,7 +46,15 @@ _Static_assert(
   "Ghostty callback pointers must fit in a const void *"
 );
 _Static_assert(
+  sizeof(const void*) == sizeof(GhosttyTerminalBellFn),
+  "Ghostty callback pointers must fit in a const void *"
+);
+_Static_assert(
   sizeof(const void*) == sizeof(GhosttyTerminalSizeFn),
+  "Ghostty callback pointers must fit in a const void *"
+);
+_Static_assert(
+  sizeof(const void*) == sizeof(GhosttyTerminalTitleChangedFn),
   "Ghostty callback pointers must fit in a const void *"
 );
 _Static_assert(
@@ -69,6 +79,13 @@ static const void* option_value_from_pty_write(
   return option_value.value;
 }
 
+static const void* option_value_from_bell(
+  GhosttyTerminalBellFn callback
+) {
+  libghostty_cpp_terminal_option_value option_value = {.bell = callback};
+  return option_value.value;
+}
+
 static const void* option_value_from_size(
   GhosttyTerminalSizeFn callback
 ) {
@@ -89,6 +106,13 @@ static const void* option_value_from_xtversion(
   GhosttyTerminalXtversionFn callback
 ) {
   libghostty_cpp_terminal_option_value option_value = {.xtversion = callback};
+  return option_value.value;
+}
+
+static const void* option_value_from_title_changed(
+  GhosttyTerminalTitleChangedFn callback
+) {
+  libghostty_cpp_terminal_option_value option_value = {.title_changed = callback};
   return option_value.value;
 }
 
@@ -176,6 +200,18 @@ static void on_pty_write(
   wrapper->pty_write(wrapper, wrapper->callback_userdata, data, len);
 }
 
+static void on_bell(
+  GhosttyTerminal terminal,
+  void* userdata
+) {
+  libghostty_cpp_terminal* wrapper = terminal_from_userdata(terminal, userdata);
+  if (wrapper == NULL || wrapper->bell == NULL) {
+    return;
+  }
+
+  wrapper->bell(wrapper, wrapper->callback_userdata);
+}
+
 static bool on_size(
   GhosttyTerminal terminal,
   void* userdata,
@@ -238,6 +274,18 @@ static GhosttyString on_xtversion(
   );
 }
 
+static void on_title_changed(
+  GhosttyTerminal terminal,
+  void* userdata
+) {
+  libghostty_cpp_terminal* wrapper = terminal_from_userdata(terminal, userdata);
+  if (wrapper == NULL || wrapper->title_changed == NULL) {
+    return;
+  }
+
+  wrapper->title_changed(wrapper, wrapper->callback_userdata);
+}
+
 static bool on_color_scheme(
   GhosttyTerminal terminal,
   void* userdata,
@@ -260,6 +308,20 @@ static libghostty_cpp_result get_u16(
   const libghostty_cpp_terminal* terminal,
   GhosttyTerminalData data,
   uint16_t* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, data, out_value)
+  );
+}
+
+static libghostty_cpp_result get_string(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  libghostty_cpp_string* out_value
 ) {
   if (terminal == NULL || out_value == NULL) {
     return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
@@ -352,6 +414,22 @@ libghostty_cpp_result libghostty_cpp_terminal_on_pty_write(
   );
 }
 
+libghostty_cpp_result libghostty_cpp_terminal_on_bell(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_bell_fn callback
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  terminal->bell = callback;
+  return set_terminal_option(
+    terminal,
+    GHOSTTY_TERMINAL_OPT_BELL,
+    callback != NULL ? option_value_from_bell(on_bell) : NULL
+  );
+}
+
 libghostty_cpp_result libghostty_cpp_terminal_on_size(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_size_fn callback
@@ -398,6 +476,22 @@ libghostty_cpp_result libghostty_cpp_terminal_on_xtversion(
     terminal,
     GHOSTTY_TERMINAL_OPT_XTVERSION,
     callback != NULL ? option_value_from_xtversion(on_xtversion) : NULL
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_on_title_changed(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_title_changed_fn callback
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  terminal->title_changed = callback;
+  return set_terminal_option(
+    terminal,
+    GHOSTTY_TERMINAL_OPT_TITLE_CHANGED,
+    callback != NULL ? option_value_from_title_changed(on_title_changed) : NULL
   );
 }
 
@@ -518,4 +612,11 @@ libghostty_cpp_result libghostty_cpp_terminal_cursor_y(
   uint16_t* out_cursor_y
 ) {
   return get_u16(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_Y, out_cursor_y);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_title(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_string* out_title
+) {
+  return get_string(terminal, GHOSTTY_TERMINAL_DATA_TITLE, out_title);
 }

@@ -172,12 +172,16 @@ struct DeviceAttributes {
 
 using PtyWriteCallback =
   std::function<void(const Terminal &, std::string_view data)>;
+using BellCallback =
+  std::function<void(const Terminal &)>;
 using SizeCallback =
   std::function<std::optional<SizeReportSize>(const Terminal &)>;
 using DeviceAttributesCallback =
   std::function<std::optional<DeviceAttributes>(const Terminal &)>;
 using XtversionCallback =
   std::function<std::optional<std::string>(const Terminal &)>;
+using TitleChangedCallback =
+  std::function<void(const Terminal &)>;
 using ColorSchemeCallback =
   std::function<std::optional<ColorScheme>(const Terminal &)>;
 
@@ -202,11 +206,15 @@ public:
 
   // Callback references are only valid for the duration of the callback.
   Terminal &on_pty_write(PtyWriteCallback callback);
+  Terminal &on_bell(BellCallback callback);
   Terminal &on_size(SizeCallback callback);
   Terminal &on_device_attributes(DeviceAttributesCallback callback);
   Terminal &on_xtversion(XtversionCallback callback);
+  Terminal &on_title_changed(TitleChangedCallback callback);
   Terminal &on_color_scheme(ColorSchemeCallback callback);
 
+  // Returned view is invalidated by the next vt_write() or reset().
+  [[nodiscard]] std::string_view title() const;
   [[nodiscard]] std::uint16_t cols() const;
   [[nodiscard]] std::uint16_t rows() const;
   [[nodiscard]] std::uint16_t cursor_x() const;

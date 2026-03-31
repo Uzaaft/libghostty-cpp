@@ -528,11 +528,22 @@ private:
     update();
   }
 
+  void sync_window_title() {
+    const std::string_view title = terminal_.title();
+    if (title.empty()) {
+      setWindowTitle(QStringLiteral("ghostling-cpp"));
+      return;
+    }
+
+    setWindowTitle(QString::fromUtf8(title.data(), static_cast<qsizetype>(title.size())));
+  }
+
   void configure_terminal() {
     terminal_
       .on_pty_write([this](const libghostty_cpp::Terminal&, std::string_view data) {
         write_pty(data);
       })
+      .on_bell([](const libghostty_cpp::Terminal&) { QApplication::beep(); })
       .on_size([this](const libghostty_cpp::Terminal&)
                  -> std::optional<libghostty_cpp::SizeReportSize> {
         return libghostty_cpp::SizeReportSize{
@@ -552,6 +563,7 @@ private:
                       -> std::optional<std::string> {
         return std::string("ghostling-cpp");
       })
+      .on_title_changed([this](const libghostty_cpp::Terminal&) { title_dirty_ = true; })
       .on_color_scheme([this](const libghostty_cpp::Terminal&)
                          -> std::optional<libghostty_cpp::ColorScheme> {
         const QColor window = palette().color(QPalette::Window);
@@ -893,7 +905,11 @@ private:
     for (;;) {
       const ssize_t read_len = ::read(pty_fd_, buffer.data(), buffer.size());
       if (read_len > 0) {
+        title_dirty_ = false;
         terminal_.vt_write(std::string_view(buffer.data(), static_cast<std::size_t>(read_len)));
+        if (title_dirty_) {
+          sync_window_title();
+        }
         changed = true;
         continue;
       }
@@ -1193,6 +1209,7 @@ private:
   libghostty_cpp::mouse::Encoder mouse_encoder_;
   libghostty_cpp::mouse::Event mouse_event_;
   std::vector<std::uint8_t> encoded_input_;
+  bool title_dirty_ = false;
   std::optional<int> suppressed_key_release_;
   int pty_fd_ = -1;
   pid_t child_pid_ = -1;

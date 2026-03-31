@@ -69,6 +69,11 @@ typedef void (*libghostty_cpp_terminal_pty_write_fn)(
   size_t len
 );
 
+typedef void (*libghostty_cpp_terminal_bell_fn)(
+  const libghostty_cpp_terminal* terminal,
+  void* userdata
+);
+
 typedef bool (*libghostty_cpp_terminal_size_fn)(
   const libghostty_cpp_terminal* terminal,
   void* userdata,
@@ -82,6 +87,11 @@ typedef bool (*libghostty_cpp_terminal_device_attributes_fn)(
 );
 
 typedef libghostty_cpp_string (*libghostty_cpp_terminal_xtversion_fn)(
+  const libghostty_cpp_terminal* terminal,
+  void* userdata
+);
+
+typedef void (*libghostty_cpp_terminal_title_changed_fn)(
   const libghostty_cpp_terminal* terminal,
   void* userdata
 );
@@ -109,6 +119,11 @@ libghostty_cpp_result libghostty_cpp_terminal_on_pty_write(
   libghostty_cpp_terminal_pty_write_fn callback
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_on_bell(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_bell_fn callback
+);
+
 libghostty_cpp_result libghostty_cpp_terminal_on_size(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_size_fn callback
@@ -122,6 +137,11 @@ libghostty_cpp_result libghostty_cpp_terminal_on_device_attributes(
 libghostty_cpp_result libghostty_cpp_terminal_on_xtversion(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_xtversion_fn callback
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_on_title_changed(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_title_changed_fn callback
 );
 
 libghostty_cpp_result libghostty_cpp_terminal_on_color_scheme(
@@ -174,6 +194,11 @@ libghostty_cpp_result libghostty_cpp_terminal_cursor_x(
 libghostty_cpp_result libghostty_cpp_terminal_cursor_y(
   const libghostty_cpp_terminal* terminal,
   uint16_t* out_cursor_y
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_title(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_string* out_title
 );
 
 #ifdef __cplusplus
