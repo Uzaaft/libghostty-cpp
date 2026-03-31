@@ -23,6 +23,7 @@
 #include <QWheelEvent>
 #include <QWidget>
 
+#include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cmath>
@@ -69,6 +70,8 @@ constexpr std::string_view kFocusGainedSequence = "\x1B[I";
 constexpr std::string_view kFocusLostSequence = "\x1B[O";
 constexpr int kInitialWindowWidth = 1024;
 constexpr int kInitialWindowHeight = 720;
+constexpr double kScrollbarWidth = 3.0;
+constexpr double kScrollbarMinThumbHeight = 18.0;
 
 struct GridMetrics {
   double cell_width = 1.0;
@@ -637,7 +640,53 @@ private:
       ++row_index;
     }
 
+    render_scrollbar(painter, foreground);
+
     render_state_.set_dirty(libghostty_cpp::Dirty::Clean);
+  }
+
+  void render_scrollbar(QPainter& painter, const QColor& foreground) const {
+    if (terminal_.active_screen() == libghostty_cpp::ActiveScreen::Alternate) {
+      return;
+    }
+
+    const libghostty_cpp::Scrollbar scrollbar = terminal_.scrollbar();
+    if (scrollbar.total <= scrollbar.len || scrollbar.len == 0) {
+      return;
+    }
+
+    const double track_height = static_cast<double>(grid_.rows) * grid_.cell_height;
+    if (track_height <= 0.0) {
+      return;
+    }
+
+    const double track_x = static_cast<double>(width()) - kPadding
+                           + ((kPadding - kScrollbarWidth) * 0.5);
+    const double track_y = kPadding;
+
+    QColor track_color = foreground;
+    track_color.setAlpha(48);
+    QColor thumb_color = foreground;
+    thumb_color.setAlpha(144);
+
+    painter.fillRect(QRectF(track_x, track_y, kScrollbarWidth, track_height), track_color);
+
+    double thumb_height = std::max(
+      kScrollbarMinThumbHeight,
+      track_height * static_cast<double>(scrollbar.len) / static_cast<double>(scrollbar.total)
+    );
+    thumb_height = std::min(thumb_height, track_height);
+
+    const std::uint64_t offset_range_rows = scrollbar.total - scrollbar.len;
+    const double thumb_travel = std::max(0.0, track_height - thumb_height);
+    double thumb_y = track_y;
+    if (offset_range_rows > 0 && thumb_travel > 0.0) {
+      const double offset_fraction = static_cast<double>(scrollbar.offset)
+                                     / static_cast<double>(offset_range_rows);
+      thumb_y += std::clamp(offset_fraction, 0.0, 1.0) * thumb_travel;
+    }
+
+    painter.fillRect(QRectF(track_x, thumb_y, kScrollbarWidth, thumb_height), thumb_color);
   }
 
   void render_cell(
@@ -954,15 +1003,6 @@ private:
     };
   }
 
-  [[nodiscard]] bool is_mouse_tracking_enabled() const {
-    using libghostty_cpp::Mode;
-
-    return is_mode_enabled(Mode::X10Mouse)
-           || is_mode_enabled(Mode::NormalMouse)
-           || is_mode_enabled(Mode::ButtonMouse)
-           || is_mode_enabled(Mode::AnyMouse);
-  }
-
   [[nodiscard]] bool is_bracketed_paste_enabled() const {
     return is_mode_enabled(libghostty_cpp::Mode::BracketedPaste);
   }
@@ -1085,7 +1125,7 @@ private:
                                                          ? libghostty_cpp::mouse::Button::Four
                                                          : libghostty_cpp::mouse::Button::Five;
 
-    if (is_mouse_tracking_enabled()) {
+    if (terminal_.is_mouse_tracking()) {
       configure_mouse_input(event.position(), event.modifiers(), event.buttons());
 
       clear_encoded_input();
@@ -1104,7 +1144,7 @@ private:
       scroll_delta = delta_steps > 0.0 ? -1 : 1;
     }
 
-    terminal_.scroll_viewport_delta(scroll_delta);
+    terminal_.scroll_viewport(libghostty_cpp::ScrollViewport::delta(scroll_delta));
     update();
     return true;
   }

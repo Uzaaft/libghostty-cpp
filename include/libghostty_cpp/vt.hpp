@@ -40,6 +40,57 @@ struct TerminalOptions {
   std::size_t max_scrollback = 0;
 };
 
+enum class ActiveScreen : std::uint8_t {
+  Primary = 0,
+  Alternate = 1,
+};
+
+struct Scrollbar {
+  std::uint64_t total = 0;
+  std::uint64_t offset = 0;
+  std::uint64_t len = 0;
+};
+
+class ScrollViewport {
+public:
+  enum class Kind : std::uint8_t {
+    Top = 0,
+    Bottom = 1,
+    Delta = 2,
+  };
+
+  [[nodiscard]] static ScrollViewport top() noexcept {
+    return ScrollViewport(Kind::Top, 0);
+  }
+
+  [[nodiscard]] static ScrollViewport bottom() noexcept {
+    return ScrollViewport(Kind::Bottom, 0);
+  }
+
+  [[nodiscard]] static ScrollViewport delta(std::ptrdiff_t amount) noexcept {
+    return ScrollViewport(Kind::Delta, amount);
+  }
+
+  [[nodiscard]] Kind kind() const noexcept {
+    return kind_;
+  }
+
+  [[nodiscard]] std::optional<std::ptrdiff_t> delta() const noexcept {
+    if (kind_ != Kind::Delta) {
+      return std::nullopt;
+    }
+
+    return delta_;
+  }
+
+private:
+  constexpr ScrollViewport(Kind kind, std::ptrdiff_t delta) noexcept
+      : kind_(kind), delta_(delta) {}
+
+  Kind kind_;
+  std::ptrdiff_t delta_;
+};
+
 struct SizeReportSize {
   std::uint16_t rows;
   std::uint16_t columns;
@@ -202,6 +253,7 @@ public:
   void resize(std::uint16_t cols, std::uint16_t rows,
               std::uint32_t cell_width_px = 0,
               std::uint32_t cell_height_px = 0);
+  void scroll_viewport(ScrollViewport scroll) noexcept;
   void scroll_viewport_delta(std::ptrdiff_t delta) noexcept;
 
   // Callback references are only valid for the duration of the callback.
@@ -220,6 +272,11 @@ public:
   [[nodiscard]] std::uint16_t rows() const;
   [[nodiscard]] std::uint16_t cursor_x() const;
   [[nodiscard]] std::uint16_t cursor_y() const;
+  [[nodiscard]] ActiveScreen active_screen() const;
+  [[nodiscard]] Scrollbar scrollbar() const;
+  [[nodiscard]] bool is_mouse_tracking() const;
+  [[nodiscard]] std::size_t total_rows() const;
+  [[nodiscard]] std::size_t scrollback_rows() const;
 
 private:
   friend class RenderState;

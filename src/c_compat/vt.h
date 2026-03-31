@@ -33,6 +33,33 @@ typedef struct libghostty_cpp_terminal_options {
   size_t max_scrollback;
 } libghostty_cpp_terminal_options;
 
+typedef enum libghostty_cpp_terminal_screen {
+  LIBGHOSTTY_CPP_TERMINAL_SCREEN_PRIMARY = 0,
+  LIBGHOSTTY_CPP_TERMINAL_SCREEN_ALTERNATE = 1,
+} libghostty_cpp_terminal_screen;
+
+typedef struct libghostty_cpp_terminal_scrollbar {
+  uint64_t total;
+  uint64_t offset;
+  uint64_t len;
+} libghostty_cpp_terminal_scrollbar;
+
+typedef enum libghostty_cpp_terminal_scroll_viewport_tag {
+  LIBGHOSTTY_CPP_SCROLL_VIEWPORT_TOP = 0,
+  LIBGHOSTTY_CPP_SCROLL_VIEWPORT_BOTTOM = 1,
+  LIBGHOSTTY_CPP_SCROLL_VIEWPORT_DELTA = 2,
+} libghostty_cpp_terminal_scroll_viewport_tag;
+
+typedef union libghostty_cpp_terminal_scroll_viewport_value {
+  ptrdiff_t delta;
+  uint64_t padding[2];
+} libghostty_cpp_terminal_scroll_viewport_value;
+
+typedef struct libghostty_cpp_terminal_scroll_viewport {
+  libghostty_cpp_terminal_scroll_viewport_tag tag;
+  libghostty_cpp_terminal_scroll_viewport_value value;
+} libghostty_cpp_terminal_scroll_viewport;
+
 typedef struct libghostty_cpp_size_report_size {
   uint16_t rows;
   uint16_t columns;
@@ -161,6 +188,36 @@ libghostty_cpp_result libghostty_cpp_terminal_mode_get(
   const libghostty_cpp_terminal* terminal,
   uint16_t mode,
   bool* out_value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_mouse_tracking(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_get_active_screen(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_screen* out_screen
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_get_scrollbar(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_scrollbar* out_scrollbar
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_total_rows(
+  const libghostty_cpp_terminal* terminal,
+  size_t* out_total_rows
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
+  const libghostty_cpp_terminal* terminal,
+  size_t* out_scrollback_rows
+);
+
+void libghostty_cpp_terminal_set_scroll_viewport(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_scroll_viewport viewport
 );
 
 void libghostty_cpp_terminal_scroll_viewport_delta(

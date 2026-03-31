@@ -186,6 +186,26 @@ static bool to_ghostty_device_attributes(
   return true;
 }
 
+static bool from_ghostty_terminal_screen(
+  GhosttyTerminalScreen screen,
+  libghostty_cpp_terminal_screen* out_screen
+) {
+  if (out_screen == NULL) {
+    return false;
+  }
+
+  switch (screen) {
+    case GHOSTTY_TERMINAL_SCREEN_PRIMARY:
+      *out_screen = LIBGHOSTTY_CPP_TERMINAL_SCREEN_PRIMARY;
+      return true;
+    case GHOSTTY_TERMINAL_SCREEN_ALTERNATE:
+      *out_screen = LIBGHOSTTY_CPP_TERMINAL_SCREEN_ALTERNATE;
+      return true;
+  }
+
+  return false;
+}
+
 static void on_pty_write(
   GhosttyTerminal terminal,
   void* userdata,
@@ -308,6 +328,34 @@ static libghostty_cpp_result get_u16(
   const libghostty_cpp_terminal* terminal,
   GhosttyTerminalData data,
   uint16_t* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, data, out_value)
+  );
+}
+
+static libghostty_cpp_result get_bool(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  bool* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, data, out_value)
+  );
+}
+
+static libghostty_cpp_result get_size(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  size_t* out_value
 ) {
   if (terminal == NULL || out_value == NULL) {
     return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
@@ -549,18 +597,113 @@ libghostty_cpp_result libghostty_cpp_terminal_mode_get(
   );
 }
 
-void libghostty_cpp_terminal_scroll_viewport_delta(
+libghostty_cpp_result libghostty_cpp_terminal_mouse_tracking(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, out_value);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_get_active_screen(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_screen* out_screen
+) {
+  if (terminal == NULL || out_screen == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyTerminalScreen screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+  const libghostty_cpp_result result = libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &screen)
+  );
+  if (result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return result;
+  }
+
+  if (!from_ghostty_terminal_screen(screen, out_screen)) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_get_scrollbar(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_scrollbar* out_scrollbar
+) {
+  if (terminal == NULL || out_scrollbar == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyTerminalScrollbar scrollbar = {0};
+  const libghostty_cpp_result result = libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &scrollbar)
+  );
+  if (result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return result;
+  }
+
+  *out_scrollbar = (libghostty_cpp_terminal_scrollbar) {
+    .total = scrollbar.total,
+    .offset = scrollbar.offset,
+    .len = scrollbar.len,
+  };
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_total_rows(
+  const libghostty_cpp_terminal* terminal,
+  size_t* out_total_rows
+) {
+  return get_size(terminal, GHOSTTY_TERMINAL_DATA_TOTAL_ROWS, out_total_rows);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
+  const libghostty_cpp_terminal* terminal,
+  size_t* out_scrollback_rows
+) {
+  return get_size(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS,
+    out_scrollback_rows
+  );
+}
+
+void libghostty_cpp_terminal_set_scroll_viewport(
   libghostty_cpp_terminal* terminal,
-  ptrdiff_t delta
+  libghostty_cpp_terminal_scroll_viewport viewport
 ) {
   if (terminal == NULL) {
     return;
   }
 
-  ghostty_terminal_scroll_viewport(
-    terminal->inner,
-    (GhosttyTerminalScrollViewport) {
-      .tag = GHOSTTY_SCROLL_VIEWPORT_DELTA,
+  GhosttyTerminalScrollViewport raw_viewport = {0};
+  switch (viewport.tag) {
+    case LIBGHOSTTY_CPP_SCROLL_VIEWPORT_TOP:
+      raw_viewport.tag = GHOSTTY_SCROLL_VIEWPORT_TOP;
+      break;
+    case LIBGHOSTTY_CPP_SCROLL_VIEWPORT_BOTTOM:
+      raw_viewport.tag = GHOSTTY_SCROLL_VIEWPORT_BOTTOM;
+      break;
+    case LIBGHOSTTY_CPP_SCROLL_VIEWPORT_DELTA:
+      raw_viewport.tag = GHOSTTY_SCROLL_VIEWPORT_DELTA;
+      raw_viewport.value.delta = viewport.value.delta;
+      break;
+    default:
+      return;
+  }
+
+  ghostty_terminal_scroll_viewport(terminal->inner, raw_viewport);
+}
+
+void libghostty_cpp_terminal_scroll_viewport_delta(
+  libghostty_cpp_terminal* terminal,
+  ptrdiff_t delta
+) {
+  libghostty_cpp_terminal_set_scroll_viewport(
+    terminal,
+    (libghostty_cpp_terminal_scroll_viewport) {
+      .tag = LIBGHOSTTY_CPP_SCROLL_VIEWPORT_DELTA,
       .value = {.delta = delta},
     }
   );

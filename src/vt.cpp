@@ -66,11 +66,27 @@ namespace {
 
 using TerminalU16Getter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint16_t*);
+using TerminalBoolGetter =
+  libghostty_cpp_result (*)(const libghostty_cpp_terminal*, bool*);
+using TerminalSizeGetter =
+  libghostty_cpp_result (*)(const libghostty_cpp_terminal*, size_t*);
 using TerminalStringGetter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, libghostty_cpp_string*);
 
 std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter getter) {
   std::uint16_t value = 0;
+  detail::throw_if_error(getter(handle, &value));
+  return value;
+}
+
+bool get_bool(const libghostty_cpp_terminal* handle, TerminalBoolGetter getter) {
+  bool value = false;
+  detail::throw_if_error(getter(handle, &value));
+  return value;
+}
+
+std::size_t get_size(const libghostty_cpp_terminal* handle, TerminalSizeGetter getter) {
+  std::size_t value = 0;
   detail::throw_if_error(getter(handle, &value));
   return value;
 }
@@ -98,6 +114,47 @@ bool query_mode_enabled(const libghostty_cpp_terminal* handle, Mode mode) {
     libghostty_cpp_terminal_mode_get(handle, static_cast<std::uint16_t>(mode), &value)
   );
   return value;
+}
+
+ActiveScreen translate_active_screen(libghostty_cpp_terminal_screen screen) {
+  switch (screen) {
+    case LIBGHOSTTY_CPP_TERMINAL_SCREEN_PRIMARY:
+      return ActiveScreen::Primary;
+    case LIBGHOSTTY_CPP_TERMINAL_SCREEN_ALTERNATE:
+      return ActiveScreen::Alternate;
+  }
+
+  throw Error(ErrorCode::InvalidValue);
+}
+
+ActiveScreen get_active_screen(const libghostty_cpp_terminal* handle) {
+  libghostty_cpp_terminal_screen screen = LIBGHOSTTY_CPP_TERMINAL_SCREEN_PRIMARY;
+  detail::throw_if_error(libghostty_cpp_terminal_get_active_screen(handle, &screen));
+  return translate_active_screen(screen);
+}
+
+Scrollbar get_scrollbar(const libghostty_cpp_terminal* handle) {
+  libghostty_cpp_terminal_scrollbar scrollbar = {0, 0, 0};
+  detail::throw_if_error(libghostty_cpp_terminal_get_scrollbar(handle, &scrollbar));
+  return Scrollbar{scrollbar.total, scrollbar.offset, scrollbar.len};
+}
+
+libghostty_cpp_terminal_scroll_viewport translate_scroll_viewport(ScrollViewport scroll) {
+  libghostty_cpp_terminal_scroll_viewport raw_viewport = {};
+  switch (scroll.kind()) {
+    case ScrollViewport::Kind::Top:
+      raw_viewport.tag = LIBGHOSTTY_CPP_SCROLL_VIEWPORT_TOP;
+      break;
+    case ScrollViewport::Kind::Bottom:
+      raw_viewport.tag = LIBGHOSTTY_CPP_SCROLL_VIEWPORT_BOTTOM;
+      break;
+    case ScrollViewport::Kind::Delta:
+      raw_viewport.tag = LIBGHOSTTY_CPP_SCROLL_VIEWPORT_DELTA;
+      raw_viewport.value.delta = scroll.delta().value_or(0);
+      break;
+  }
+
+  return raw_viewport;
 }
 
 libghostty_cpp_size_report_size translate_size_report_size(
@@ -417,8 +474,12 @@ bool Terminal::is_mode_enabled(Mode mode) const {
   return query_mode_enabled(handle_, mode);
 }
 
+void Terminal::scroll_viewport(ScrollViewport scroll) noexcept {
+  libghostty_cpp_terminal_set_scroll_viewport(handle_, translate_scroll_viewport(scroll));
+}
+
 void Terminal::scroll_viewport_delta(std::ptrdiff_t delta) noexcept {
-  libghostty_cpp_terminal_scroll_viewport_delta(handle_, delta);
+  scroll_viewport(ScrollViewport::delta(delta));
 }
 
 void Terminal::resize(
@@ -549,6 +610,26 @@ std::uint16_t Terminal::cursor_x() const {
 
 std::uint16_t Terminal::cursor_y() const {
   return get_u16(handle_, libghostty_cpp_terminal_cursor_y);
+}
+
+ActiveScreen Terminal::active_screen() const {
+  return get_active_screen(handle_);
+}
+
+Scrollbar Terminal::scrollbar() const {
+  return get_scrollbar(handle_);
+}
+
+bool Terminal::is_mouse_tracking() const {
+  return get_bool(handle_, libghostty_cpp_terminal_mouse_tracking);
+}
+
+std::size_t Terminal::total_rows() const {
+  return get_size(handle_, libghostty_cpp_terminal_total_rows);
+}
+
+std::size_t Terminal::scrollback_rows() const {
+  return get_size(handle_, libghostty_cpp_terminal_scrollback_rows);
 }
 
 void Terminal::release() noexcept {
