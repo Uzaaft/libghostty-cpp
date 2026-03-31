@@ -150,6 +150,7 @@ public:
   void resize(std::uint16_t cols, std::uint16_t rows,
               std::uint32_t cell_width_px = 0,
               std::uint32_t cell_height_px = 0);
+  void scroll_viewport_delta(std::ptrdiff_t delta) noexcept;
 
   // Callback references are only valid for the duration of the callback.
   Terminal &on_pty_write(PtyWriteCallback callback);

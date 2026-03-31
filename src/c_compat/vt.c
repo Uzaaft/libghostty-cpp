@@ -441,6 +441,23 @@ void libghostty_cpp_terminal_reset(libghostty_cpp_terminal* terminal) {
   ghostty_terminal_reset(terminal->inner);
 }
 
+void libghostty_cpp_terminal_scroll_viewport_delta(
+  libghostty_cpp_terminal* terminal,
+  ptrdiff_t delta
+) {
+  if (terminal == NULL) {
+    return;
+  }
+
+  ghostty_terminal_scroll_viewport(
+    terminal->inner,
+    (GhosttyTerminalScrollViewport) {
+      .tag = GHOSTTY_SCROLL_VIEWPORT_DELTA,
+      .value = {.delta = delta},
+    }
+  );
+}
+
 libghostty_cpp_result libghostty_cpp_terminal_resize(
   libghostty_cpp_terminal* terminal,
   uint16_t cols,

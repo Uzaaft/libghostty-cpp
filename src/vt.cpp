@@ -346,6 +346,10 @@ void Terminal::reset() noexcept {
   libghostty_cpp_terminal_reset(handle_);
 }
 
+void Terminal::scroll_viewport_delta(std::ptrdiff_t delta) noexcept {
+  libghostty_cpp_terminal_scroll_viewport_delta(handle_, delta);
+}
+
 void Terminal::resize(
   std::uint16_t cols,
   std::uint16_t rows,

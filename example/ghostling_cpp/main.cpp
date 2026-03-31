@@ -1,4 +1,5 @@
 #include "libghostty_cpp/key.hpp"
+#include "libghostty_cpp/mouse.hpp"
 #include "libghostty_cpp/render.hpp"
 #include "libghostty_cpp/vt.hpp"
 
@@ -10,11 +11,13 @@
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
 #include <QString>
 #include <QStringList>
 #include <QSocketNotifier>
+#include <QWheelEvent>
 #include <QWidget>
 
 #include <array>
@@ -55,6 +58,8 @@ constexpr double kPadding = 6.0;
 constexpr double kCellGap = 0.0;
 constexpr double kRowGap = 2.0;
 constexpr std::size_t kScrollbackLines = 1000;
+constexpr std::size_t kEncodedInputReserve = 64;
+constexpr double kWheelScrollScale = -2.5;
 constexpr int kInitialWindowWidth = 1024;
 constexpr int kInitialWindowHeight = 720;
 
@@ -258,6 +263,55 @@ struct KeyMapping {
   return event.text().toUtf8();
 }
 
+[[nodiscard]] std::optional<libghostty_cpp::mouse::Button> map_qt_mouse_button(
+  Qt::MouseButton button
+) {
+  using libghostty_cpp::mouse::Button;
+
+  switch (button) {
+    case Qt::LeftButton:
+      return Button::Left;
+    case Qt::RightButton:
+      return Button::Right;
+    case Qt::MiddleButton:
+      return Button::Middle;
+    default:
+      return std::nullopt;
+  }
+}
+
+[[nodiscard]] std::optional<libghostty_cpp::mouse::Button> first_pressed_mouse_button(
+  Qt::MouseButtons buttons
+) {
+  constexpr std::array<Qt::MouseButton, 3> kSupportedButtons = {
+    Qt::LeftButton,
+    Qt::RightButton,
+    Qt::MiddleButton,
+  };
+
+  for (const Qt::MouseButton button : kSupportedButtons) {
+    if (buttons.testFlag(button)) {
+      return map_qt_mouse_button(button);
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] double wheel_steps(const QWheelEvent& event) {
+  const QPoint pixel_delta = event.pixelDelta();
+  if (!pixel_delta.isNull()) {
+    return static_cast<double>(pixel_delta.y()) / 40.0;
+  }
+
+  const QPoint angle_delta = event.angleDelta();
+  if (!angle_delta.isNull()) {
+    return static_cast<double>(angle_delta.y()) / 120.0;
+  }
+
+  return 0.0;
+}
+
 [[nodiscard]] QString terminal_font_path() {
   return QCoreApplication::applicationDirPath() + "/JetBrainsMono-Medium.ttf";
 }
@@ -291,8 +345,10 @@ public:
     setWindowTitle(QStringLiteral("ghostling-cpp"));
     setFocusPolicy(Qt::StrongFocus);
     setAttribute(Qt::WA_OpaquePaintEvent);
+    setMouseTracking(true);
     resize(kInitialWindowWidth, kInitialWindowHeight);
     setFont(terminal_font_);
+    encoded_input_.reserve(kEncodedInputReserve);
 
     configure_terminal();
     apply_grid(measure_grid());
@@ -330,8 +386,7 @@ protected:
         return;
       }
     } catch (const std::exception& error) {
-      paint_error_frame_ = QString::fromUtf8(error.what());
-      update();
+      handle_input_error(error);
       event->accept();
       return;
     }
@@ -339,7 +394,74 @@ protected:
     QWidget::keyPressEvent(event);
   }
 
+  void mousePressEvent(QMouseEvent* event) override {
+    setFocus(Qt::MouseFocusReason);
+
+    try {
+      if (handle_mouse_button(*event, libghostty_cpp::mouse::Action::Press)) {
+        event->accept();
+        return;
+      }
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+      event->accept();
+      return;
+    }
+
+    QWidget::mousePressEvent(event);
+  }
+
+  void mouseReleaseEvent(QMouseEvent* event) override {
+    try {
+      if (handle_mouse_button(*event, libghostty_cpp::mouse::Action::Release)) {
+        event->accept();
+        return;
+      }
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+      event->accept();
+      return;
+    }
+
+    QWidget::mouseReleaseEvent(event);
+  }
+
+  void mouseMoveEvent(QMouseEvent* event) override {
+    try {
+      if (handle_mouse_move(*event)) {
+        event->accept();
+        return;
+      }
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+      event->accept();
+      return;
+    }
+
+    QWidget::mouseMoveEvent(event);
+  }
+
+  void wheelEvent(QWheelEvent* event) override {
+    try {
+      if (handle_wheel(*event)) {
+        event->accept();
+        return;
+      }
+    } catch (const std::exception& error) {
+      handle_input_error(error);
+      event->accept();
+      return;
+    }
+
+    QWidget::wheelEvent(event);
+  }
+
 private:
+  void handle_input_error(const std::exception& error) {
+    paint_error_frame_ = QString::fromUtf8(error.what());
+    update();
+  }
+
   void configure_terminal() {
     terminal_
       .on_pty_write([this](const libghostty_cpp::Terminal&, std::string_view data) {
@@ -671,6 +793,30 @@ private:
     }
   }
 
+  void write_encoded_bytes(const std::vector<std::uint8_t>& encoded) const {
+    if (encoded.empty()) {
+      return;
+    }
+
+    write_pty(std::string_view(
+      reinterpret_cast<const char*>(encoded.data()),
+      encoded.size()
+    ));
+  }
+
+  void clear_encoded_input() {
+    encoded_input_.clear();
+  }
+
+  [[nodiscard]] bool flush_encoded_input() const {
+    if (encoded_input_.empty()) {
+      return false;
+    }
+
+    write_encoded_bytes(encoded_input_);
+    return true;
+  }
+
   void drain_pty() {
     if (pty_fd_ < 0) {
       return;
@@ -710,6 +856,116 @@ private:
     }
   }
 
+  [[nodiscard]] libghostty_cpp::mouse::EncoderSize make_mouse_encoder_size() const {
+    const std::uint32_t padding_px = static_cast<std::uint32_t>(std::lround(
+      kPadding * devicePixelRatioF()
+    ));
+    return libghostty_cpp::mouse::EncoderSize{
+      grid_.window_width_px,
+      grid_.window_height_px,
+      grid_.cell_width_px,
+      grid_.cell_height_px,
+      padding_px,
+      padding_px,
+      padding_px,
+      padding_px,
+    };
+  }
+
+  void configure_mouse_input(
+    const QPointF& position,
+    Qt::KeyboardModifiers modifiers,
+    Qt::MouseButtons buttons
+  ) {
+    mouse_event_
+      .set_mods(to_ghostty_mods(modifiers))
+      .set_position(libghostty_cpp::mouse::Position{
+        static_cast<float>(position.x()),
+        static_cast<float>(position.y()),
+      });
+
+    mouse_encoder_
+      .set_options_from_terminal(terminal_)
+      .set_size(make_mouse_encoder_size())
+      .set_any_button_pressed(buttons != Qt::NoButton)
+      .set_track_last_cell(true);
+  }
+
+  [[nodiscard]] bool handle_mouse_button(
+    const QMouseEvent& event,
+    libghostty_cpp::mouse::Action action
+  ) {
+    if (pty_fd_ < 0) {
+      return false;
+    }
+
+    const std::optional<libghostty_cpp::mouse::Button> button =
+      map_qt_mouse_button(event.button());
+    if (!button.has_value()) {
+      return false;
+    }
+
+    configure_mouse_input(event.position(), event.modifiers(), event.buttons());
+    mouse_event_.set_action(action).set_button(button);
+
+    clear_encoded_input();
+    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+    return flush_encoded_input();
+  }
+
+  [[nodiscard]] bool handle_mouse_move(const QMouseEvent& event) {
+    if (pty_fd_ < 0) {
+      return false;
+    }
+
+    configure_mouse_input(event.position(), event.modifiers(), event.buttons());
+    mouse_event_
+      .set_action(libghostty_cpp::mouse::Action::Motion)
+      .set_button(first_pressed_mouse_button(event.buttons()));
+
+    clear_encoded_input();
+    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+    return flush_encoded_input();
+  }
+
+  [[nodiscard]] bool handle_wheel(const QWheelEvent& event) {
+    if (pty_fd_ < 0) {
+      return false;
+    }
+
+    const double delta_steps = wheel_steps(event);
+    if (std::abs(delta_steps) < 1e-6) {
+      return false;
+    }
+
+    const libghostty_cpp::mouse::Button scroll_button = delta_steps > 0.0
+                                                         ? libghostty_cpp::mouse::Button::Four
+                                                         : libghostty_cpp::mouse::Button::Five;
+
+    configure_mouse_input(event.position(), event.modifiers(), event.buttons());
+
+    clear_encoded_input();
+    mouse_event_.set_button(scroll_button).set_action(libghostty_cpp::mouse::Action::Press);
+    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+
+    mouse_event_.set_action(libghostty_cpp::mouse::Action::Release);
+    mouse_encoder_.encode_to(encoded_input_, mouse_event_);
+
+    if (flush_encoded_input()) {
+      return true;
+    }
+
+    std::ptrdiff_t scroll_delta =
+      static_cast<std::ptrdiff_t>(std::lround(delta_steps * kWheelScrollScale));
+    if (scroll_delta == 0) {
+      scroll_delta = delta_steps > 0.0 ? -1 : 1;
+    }
+
+    terminal_.scroll_viewport_delta(scroll_delta);
+    update();
+    return true;
+  }
+
   [[nodiscard]] bool handle_key_press(const QKeyEvent& event) {
     if (pty_fd_ < 0) {
       return false;
@@ -742,15 +998,9 @@ private:
         key_event_.set_utf8(std::string_view(utf8.constData(), utf8.size()));
       }
 
-      std::vector<std::uint8_t> encoded;
-      encoded.reserve(16);
-      key_encoder_.set_options_from_terminal(terminal_).encode_to(encoded, key_event_);
-      if (!encoded.empty()) {
-        write_pty(std::string_view(
-          reinterpret_cast<const char*>(encoded.data()),
-          encoded.size()
-        ));
-      }
+      clear_encoded_input();
+      key_encoder_.set_options_from_terminal(terminal_).encode_to(encoded_input_, key_event_);
+      static_cast<void>(flush_encoded_input());
       return true;
     }
 
@@ -772,6 +1022,9 @@ private:
   libghostty_cpp::CellIterator cell_iterator_;
   libghostty_cpp::key::Encoder key_encoder_;
   libghostty_cpp::key::Event key_event_;
+  libghostty_cpp::mouse::Encoder mouse_encoder_;
+  libghostty_cpp::mouse::Event mouse_event_;
+  std::vector<std::uint8_t> encoded_input_;
   int pty_fd_ = -1;
   pid_t child_pid_ = -1;
   std::unique_ptr<QSocketNotifier> socket_notifier_;
