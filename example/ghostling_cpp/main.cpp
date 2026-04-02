@@ -85,6 +85,16 @@ struct GridMetrics {
   std::uint16_t window_height_px = 1;
 };
 
+struct Selection {
+  libghostty_cpp::PointCoordinate anchor;
+  libghostty_cpp::PointCoordinate focus;
+};
+
+struct SelectionBounds {
+  libghostty_cpp::PointCoordinate start;
+  libghostty_cpp::PointCoordinate end;
+};
+
 struct KeyMapping {
   libghostty_cpp::key::Key key;
   char32_t unshifted_codepoint;
@@ -287,6 +297,19 @@ struct KeyMapping {
 
 [[nodiscard]] bool is_paste_shortcut(const QKeyEvent& event) {
   return event.matches(QKeySequence::Paste) || is_shift_insert_paste(event);
+}
+
+[[nodiscard]] bool is_copy_shortcut(const QKeyEvent& event) {
+  return event.key() == Qt::Key_C
+         && relevant_keyboard_modifiers(event.modifiers())
+              == (Qt::ShiftModifier | Qt::ControlModifier);
+}
+
+[[nodiscard]] bool point_precedes_or_equals(
+  libghostty_cpp::PointCoordinate lhs,
+  libghostty_cpp::PointCoordinate rhs
+) noexcept {
+  return lhs.y < rhs.y || (lhs.y == rhs.y && lhs.x <= rhs.x);
 }
 
 [[nodiscard]] std::optional<libghostty_cpp::mouse::Button> map_qt_mouse_button(
@@ -526,6 +549,213 @@ private:
     return terminal_.is_mode_enabled(mode);
   }
 
+  void clear_selection() noexcept {
+    selection_.reset();
+    selection_in_progress_ = false;
+  }
+
+  void clear_primary_selection() const {
+    QClipboard* clipboard = QApplication::clipboard();
+    if (clipboard == nullptr || !clipboard->supportsSelection()) {
+      return;
+    }
+
+    clipboard->setText(QString{}, QClipboard::Selection);
+  }
+
+  void clear_selection_if_any() {
+    if (!selection_.has_value()) {
+      return;
+    }
+
+    clear_selection();
+    clear_primary_selection();
+    update();
+  }
+
+  [[nodiscard]] std::optional<SelectionBounds> selection_bounds() const noexcept {
+    if (!selection_.has_value()) {
+      return std::nullopt;
+    }
+
+    if (point_precedes_or_equals(selection_->anchor, selection_->focus)) {
+      return SelectionBounds{selection_->anchor, selection_->focus};
+    }
+
+    return SelectionBounds{selection_->focus, selection_->anchor};
+  }
+
+  [[nodiscard]] bool is_selected_cell(
+    std::uint16_t row_index,
+    std::uint16_t column_index
+  ) const noexcept {
+    const std::optional<SelectionBounds> bounds = selection_bounds();
+    if (!bounds.has_value()) {
+      return false;
+    }
+
+    const libghostty_cpp::PointCoordinate point{column_index, row_index};
+    return point_precedes_or_equals(bounds->start, point)
+           && point_precedes_or_equals(point, bounds->end);
+  }
+
+  [[nodiscard]] std::optional<libghostty_cpp::PointCoordinate> viewport_point_from_position(
+    const QPointF& position,
+    bool clamp_to_grid
+  ) const {
+    const double width = static_cast<double>(grid_.cols) * grid_.cell_width;
+    const double height = static_cast<double>(grid_.rows) * grid_.cell_height;
+    if (width <= 0.0 || height <= 0.0) {
+      return std::nullopt;
+    }
+
+    double x = position.x() - kPadding;
+    double y = position.y() - kPadding;
+    if (!clamp_to_grid) {
+      if (x < 0.0 || y < 0.0 || x >= width || y >= height) {
+        return std::nullopt;
+      }
+    } else {
+      x = std::clamp(x, 0.0, std::max(0.0, width - 1e-6));
+      y = std::clamp(y, 0.0, std::max(0.0, height - 1e-6));
+    }
+
+    const long column = static_cast<long>(std::floor(x / grid_.cell_width));
+    const long row = static_cast<long>(std::floor(y / grid_.cell_height));
+    return libghostty_cpp::PointCoordinate{
+      static_cast<std::uint16_t>(std::clamp<long>(column, 0, grid_.cols - 1)),
+      static_cast<std::uint32_t>(std::clamp<long>(row, 0, grid_.rows - 1)),
+    };
+  }
+
+  [[nodiscard]] QString selection_text() const {
+    const std::optional<SelectionBounds> bounds = selection_bounds();
+    if (!bounds.has_value()) {
+      return {};
+    }
+
+    std::u32string text;
+    for (std::uint32_t row = bounds->start.y;; ++row) {
+      const std::uint16_t first_column = row == bounds->start.y ? bounds->start.x : 0;
+      const std::uint16_t last_column = row == bounds->end.y ? bounds->end.x : grid_.cols - 1;
+
+      bool row_is_wrapped = false;
+      std::u32string row_text;
+      for (std::uint16_t column = first_column; column <= last_column; ++column) {
+        const libghostty_cpp::GridRef ref = terminal_.grid_ref(
+          libghostty_cpp::Point::viewport(libghostty_cpp::PointCoordinate{column, row})
+        );
+        row_is_wrapped = ref.row_is_wrapped();
+
+        if (ref.cell_wide() == libghostty_cpp::GridCellWide::SpacerTail
+            || ref.cell_wide() == libghostty_cpp::GridCellWide::SpacerHead) {
+          continue;
+        }
+
+        if (ref.cell_has_text()) {
+          row_text += ref.graphemes();
+          continue;
+        }
+
+        row_text.push_back(U' ');
+      }
+
+      if (!row_is_wrapped) {
+        while (!row_text.empty() && row_text.back() == U' ') {
+          row_text.pop_back();
+        }
+      }
+
+      text += row_text;
+      if (row == bounds->end.y) {
+        break;
+      }
+
+      if (!row_is_wrapped) {
+        text.push_back(U'\n');
+      }
+    }
+
+    if (text.empty()) {
+      return {};
+    }
+
+    return QString::fromUcs4(text.data(), static_cast<qsizetype>(text.size()));
+  }
+
+  void sync_primary_selection() const {
+    QClipboard* clipboard = QApplication::clipboard();
+    if (clipboard == nullptr || !clipboard->supportsSelection()) {
+      return;
+    }
+
+    clipboard->setText(selection_text(), QClipboard::Selection);
+  }
+
+  [[nodiscard]] bool copy_selection_to_clipboard() const {
+    const QString text = selection_text();
+    if (text.isEmpty()) {
+      return false;
+    }
+
+    QClipboard* clipboard = QApplication::clipboard();
+    if (clipboard == nullptr) {
+      return false;
+    }
+
+    clipboard->setText(text, QClipboard::Clipboard);
+    return true;
+  }
+
+  [[nodiscard]] bool begin_selection(const QPointF& position) {
+    const bool had_selection = selection_.has_value();
+    clear_selection();
+
+    const std::optional<libghostty_cpp::PointCoordinate> point =
+      viewport_point_from_position(position, false);
+    if (!point.has_value()) {
+      if (had_selection) {
+        clear_primary_selection();
+        update();
+      }
+
+      return had_selection;
+    }
+
+    selection_ = Selection{*point, *point};
+    selection_in_progress_ = true;
+    sync_primary_selection();
+    update();
+    return true;
+  }
+
+  [[nodiscard]] bool update_selection(const QPointF& position, bool clamp_to_grid) {
+    if (!selection_.has_value() || !selection_in_progress_) {
+      return false;
+    }
+
+    const std::optional<libghostty_cpp::PointCoordinate> point =
+      viewport_point_from_position(position, clamp_to_grid);
+    if (!point.has_value()) {
+      return false;
+    }
+
+    selection_->focus = *point;
+    sync_primary_selection();
+    update();
+    return true;
+  }
+
+  [[nodiscard]] bool finish_selection(const QPointF& position) {
+    if (!selection_in_progress_) {
+      return false;
+    }
+
+    const bool handled = update_selection(position, true);
+    selection_in_progress_ = false;
+    return handled;
+  }
+
   void handle_input_error(const std::exception& error) {
     paint_error_frame_ = QString::fromUtf8(error.what());
     update();
@@ -579,6 +809,8 @@ private:
   }
 
   void apply_grid(GridMetrics metrics) {
+    clear_selection();
+    clear_primary_selection();
     grid_ = metrics;
     terminal_.resize(
       grid_.cols,
@@ -713,6 +945,13 @@ private:
 
     if (style.inverse) {
       std::swap(cell_fg, cell_bg);
+      has_background = true;
+    }
+
+    if (is_selected_cell(row_index, column_index)) {
+      QColor selection_color = foreground;
+      selection_color.setAlpha(96);
+      cell_bg = selection_color;
       has_background = true;
     }
 
@@ -983,6 +1222,8 @@ private:
     }
 
     if (changed) {
+      clear_selection();
+      clear_primary_selection();
       update();
     }
   }
@@ -1023,6 +1264,8 @@ private:
     if (!has_active_pty()) {
       return false;
     }
+
+    clear_selection_if_any();
 
     const QClipboard* clipboard = QApplication::clipboard();
     if (clipboard == nullptr) {
@@ -1088,6 +1331,18 @@ private:
       return false;
     }
 
+    if (!terminal_.is_mouse_tracking() && *button == libghostty_cpp::mouse::Button::Left) {
+      if (action == libghostty_cpp::mouse::Action::Press) {
+        return begin_selection(event.position());
+      }
+
+      if (action == libghostty_cpp::mouse::Action::Release) {
+        return finish_selection(event.position());
+      }
+    }
+
+    clear_selection_if_any();
+
     configure_mouse_input(event.position(), event.modifiers(), event.buttons());
     mouse_event_.set_action(action).set_button(button);
 
@@ -1098,6 +1353,14 @@ private:
 
   [[nodiscard]] bool handle_mouse_move(const QMouseEvent& event) {
     if (!has_active_pty()) {
+      return false;
+    }
+
+    if (selection_in_progress_) {
+      return update_selection(event.position(), true);
+    }
+
+    if (!terminal_.is_mouse_tracking()) {
       return false;
     }
 
@@ -1138,6 +1401,8 @@ private:
       return flush_encoded_input();
     }
 
+    clear_selection_if_any();
+
     std::ptrdiff_t scroll_delta =
       static_cast<std::ptrdiff_t>(std::lround(delta_steps * kWheelScrollScale));
     if (scroll_delta == 0) {
@@ -1166,6 +1431,10 @@ private:
                               : encoder_utf8_text(event);
 
     if (mapping.has_value()) {
+      if (action != libghostty_cpp::key::Action::Release) {
+        clear_selection_if_any();
+      }
+
       Mods consumed_mods = Mods::None;
       if (!utf8.isEmpty() && event.modifiers().testFlag(Qt::ShiftModifier)
           && mapping->unshifted_codepoint != U'\0') {
@@ -1194,6 +1463,7 @@ private:
 
     if (allow_text_fallback && !has_text_modifiers(event.modifiers())
         && is_printable_text(event.text())) {
+      clear_selection_if_any();
       const QByteArray text = event.text().toUtf8();
       write_pty(std::string_view(text.constData(), text.size()));
       return true;
@@ -1204,6 +1474,15 @@ private:
 
   [[nodiscard]] bool handle_key_press(const QKeyEvent& event) {
     using libghostty_cpp::key::Action;
+
+    if (is_copy_shortcut(event)) {
+      if (!event.isAutoRepeat() && copy_selection_to_clipboard()) {
+        suppressed_key_release_ = event.key();
+        return true;
+      }
+
+      return false;
+    }
 
     if (is_paste_shortcut(event)) {
       if (!event.isAutoRepeat()) {
@@ -1250,6 +1529,8 @@ private:
   libghostty_cpp::mouse::Event mouse_event_;
   std::vector<std::uint8_t> encoded_input_;
   bool title_dirty_ = false;
+  std::optional<Selection> selection_;
+  bool selection_in_progress_ = false;
   std::optional<int> suppressed_key_release_;
   int pty_fd_ = -1;
   pid_t child_pid_ = -1;

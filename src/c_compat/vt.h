@@ -44,6 +44,41 @@ typedef struct libghostty_cpp_terminal_scrollbar {
   uint64_t len;
 } libghostty_cpp_terminal_scrollbar;
 
+typedef struct libghostty_cpp_point_coordinate {
+  uint16_t x;
+  uint32_t y;
+} libghostty_cpp_point_coordinate;
+
+typedef enum libghostty_cpp_point_tag {
+  LIBGHOSTTY_CPP_POINT_ACTIVE = 0,
+  LIBGHOSTTY_CPP_POINT_VIEWPORT = 1,
+  LIBGHOSTTY_CPP_POINT_SCREEN = 2,
+  LIBGHOSTTY_CPP_POINT_HISTORY = 3,
+} libghostty_cpp_point_tag;
+
+typedef union libghostty_cpp_point_value {
+  libghostty_cpp_point_coordinate coordinate;
+  uint64_t padding[2];
+} libghostty_cpp_point_value;
+
+typedef struct libghostty_cpp_point {
+  libghostty_cpp_point_tag tag;
+  libghostty_cpp_point_value value;
+} libghostty_cpp_point;
+
+typedef enum libghostty_cpp_grid_cell_wide {
+  LIBGHOSTTY_CPP_GRID_CELL_WIDE_NARROW = 0,
+  LIBGHOSTTY_CPP_GRID_CELL_WIDE_WIDE = 1,
+  LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_TAIL = 2,
+  LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_HEAD = 3,
+} libghostty_cpp_grid_cell_wide;
+
+typedef struct libghostty_cpp_grid_ref_snapshot {
+  bool row_is_wrapped;
+  bool cell_has_text;
+  libghostty_cpp_grid_cell_wide cell_wide;
+} libghostty_cpp_grid_ref_snapshot;
+
 typedef enum libghostty_cpp_terminal_scroll_viewport_tag {
   LIBGHOSTTY_CPP_SCROLL_VIEWPORT_TOP = 0,
   LIBGHOSTTY_CPP_SCROLL_VIEWPORT_BOTTOM = 1,
@@ -213,6 +248,25 @@ libghostty_cpp_result libghostty_cpp_terminal_total_rows(
 libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
   const libghostty_cpp_terminal* terminal,
   size_t* out_scrollback_rows
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_snapshot(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  libghostty_cpp_grid_ref_snapshot* out_snapshot
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes_len(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  size_t* out_len
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint32_t* out_codepoints,
+  size_t out_codepoints_len
 );
 
 void libghostty_cpp_terminal_set_scroll_viewport(

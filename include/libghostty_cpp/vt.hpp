@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "libghostty_cpp/error.hpp"
@@ -51,6 +52,52 @@ struct Scrollbar {
   std::uint64_t len = 0;
 };
 
+struct PointCoordinate {
+  std::uint16_t x;
+  std::uint32_t y;
+};
+
+class Point {
+public:
+  enum class Kind : std::uint8_t {
+    Active = 0,
+    Viewport = 1,
+    Screen = 2,
+    History = 3,
+  };
+
+  [[nodiscard]] static Point active(PointCoordinate coordinate) noexcept {
+    return Point(Kind::Active, coordinate);
+  }
+
+  [[nodiscard]] static Point viewport(PointCoordinate coordinate) noexcept {
+    return Point(Kind::Viewport, coordinate);
+  }
+
+  [[nodiscard]] static Point screen(PointCoordinate coordinate) noexcept {
+    return Point(Kind::Screen, coordinate);
+  }
+
+  [[nodiscard]] static Point history(PointCoordinate coordinate) noexcept {
+    return Point(Kind::History, coordinate);
+  }
+
+  [[nodiscard]] Kind kind() const noexcept {
+    return kind_;
+  }
+
+  [[nodiscard]] PointCoordinate coordinate() const noexcept {
+    return coordinate_;
+  }
+
+private:
+  constexpr Point(Kind kind, PointCoordinate coordinate) noexcept
+      : kind_(kind), coordinate_(coordinate) {}
+
+  Kind kind_;
+  PointCoordinate coordinate_;
+};
+
 class ScrollViewport {
 public:
   enum class Kind : std::uint8_t {
@@ -89,6 +136,51 @@ private:
 
   Kind kind_;
   std::ptrdiff_t delta_;
+};
+
+enum class GridCellWide : std::uint8_t {
+  Narrow = 0,
+  Wide = 1,
+  SpacerTail = 2,
+  SpacerHead = 3,
+};
+
+class GridRef {
+public:
+  [[nodiscard]] bool row_is_wrapped() const noexcept {
+    return row_is_wrapped_;
+  }
+
+  [[nodiscard]] bool cell_has_text() const noexcept {
+    return cell_has_text_;
+  }
+
+  [[nodiscard]] GridCellWide cell_wide() const noexcept {
+    return cell_wide_;
+  }
+
+  [[nodiscard]] const std::u32string &graphemes() const noexcept {
+    return graphemes_;
+  }
+
+private:
+  GridRef(
+    bool row_is_wrapped,
+    bool cell_has_text,
+    GridCellWide cell_wide,
+    std::u32string graphemes
+  )
+      : row_is_wrapped_(row_is_wrapped),
+        cell_has_text_(cell_has_text),
+        cell_wide_(cell_wide),
+        graphemes_(std::move(graphemes)) {}
+
+  bool row_is_wrapped_ = false;
+  bool cell_has_text_ = false;
+  GridCellWide cell_wide_ = GridCellWide::Narrow;
+  std::u32string graphemes_;
+
+  friend class Terminal;
 };
 
 struct SizeReportSize {
@@ -250,6 +342,7 @@ public:
   void vt_write(std::string_view data);
   void reset() noexcept;
   [[nodiscard]] bool is_mode_enabled(Mode mode) const;
+  [[nodiscard]] GridRef grid_ref(Point point) const;
   void resize(std::uint16_t cols, std::uint16_t rows,
               std::uint32_t cell_width_px = 0,
               std::uint32_t cell_height_px = 0);

@@ -1,6 +1,7 @@
 #include "c_compat/vt.h"
 
 #include "c_compat/internal.h"
+#include "c_compat/render.h"
 
 #include <stdlib.h>
 
@@ -204,6 +205,67 @@ static bool from_ghostty_terminal_screen(
   }
 
   return false;
+}
+
+static bool to_ghostty_point(
+  libghostty_cpp_point point,
+  GhosttyPoint* out_point
+) {
+  if (out_point == NULL) {
+    return false;
+  }
+
+  *out_point = (GhosttyPoint) {
+    .tag = GHOSTTY_POINT_TAG_ACTIVE,
+    .value = {
+      .coordinate = {
+        .x = point.value.coordinate.x,
+        .y = point.value.coordinate.y,
+      },
+    },
+  };
+
+  switch (point.tag) {
+    case LIBGHOSTTY_CPP_POINT_ACTIVE:
+      out_point->tag = GHOSTTY_POINT_TAG_ACTIVE;
+      return true;
+    case LIBGHOSTTY_CPP_POINT_VIEWPORT:
+      out_point->tag = GHOSTTY_POINT_TAG_VIEWPORT;
+      return true;
+    case LIBGHOSTTY_CPP_POINT_SCREEN:
+      out_point->tag = GHOSTTY_POINT_TAG_SCREEN;
+      return true;
+    case LIBGHOSTTY_CPP_POINT_HISTORY:
+      out_point->tag = GHOSTTY_POINT_TAG_HISTORY;
+      return true;
+  }
+
+  return false;
+}
+
+static libghostty_cpp_result resolve_grid_ref(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  GhosttyGridRef* out_ref
+) {
+  if (terminal == NULL || out_ref == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyPoint raw_point = {
+    .tag = GHOSTTY_POINT_TAG_ACTIVE,
+    .value = {
+      .coordinate = {0, 0},
+    },
+  };
+  if (!to_ghostty_point(point, &raw_point)) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  *out_ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_grid_ref(terminal->inner, raw_point, out_ref)
+  );
 }
 
 static void on_pty_write(
@@ -666,6 +728,119 @@ libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
     terminal,
     GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS,
     out_scrollback_rows
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_snapshot(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  libghostty_cpp_grid_ref_snapshot* out_snapshot
+) {
+  if (out_snapshot == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  GhosttyRow row = 0;
+  const GhosttyResult row_result = ghostty_grid_ref_row(&ref, &row);
+  if (row_result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(row_result);
+  }
+
+  const libghostty_cpp_result wrap_result =
+    libghostty_cpp_row_is_wrapped((libghostty_cpp_row) row, &out_snapshot->row_is_wrapped);
+  if (wrap_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return wrap_result;
+  }
+
+  GhosttyCell cell = 0;
+  const GhosttyResult cell_result = ghostty_grid_ref_cell(&ref, &cell);
+  if (cell_result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(cell_result);
+  }
+
+  const libghostty_cpp_result has_text_result = libghostty_cpp_cell_has_text(
+    (libghostty_cpp_cell) cell,
+    &out_snapshot->cell_has_text
+  );
+  if (has_text_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return has_text_result;
+  }
+
+  libghostty_cpp_cell_wide wide = LIBGHOSTTY_CPP_CELL_WIDE_NARROW;
+  const libghostty_cpp_result wide_result = libghostty_cpp_cell_get_wide(
+    (libghostty_cpp_cell) cell,
+    &wide
+  );
+  if (wide_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return wide_result;
+  }
+
+  switch (wide) {
+    case LIBGHOSTTY_CPP_CELL_WIDE_NARROW:
+      out_snapshot->cell_wide = LIBGHOSTTY_CPP_GRID_CELL_WIDE_NARROW;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case LIBGHOSTTY_CPP_CELL_WIDE_WIDE:
+      out_snapshot->cell_wide = LIBGHOSTTY_CPP_GRID_CELL_WIDE_WIDE;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case LIBGHOSTTY_CPP_CELL_WIDE_SPACER_TAIL:
+      out_snapshot->cell_wide = LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_TAIL;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case LIBGHOSTTY_CPP_CELL_WIDE_SPACER_HEAD:
+      out_snapshot->cell_wide = LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_HEAD;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes_len(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  size_t* out_len
+) {
+  if (out_len == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  const GhosttyResult result = ghostty_grid_ref_graphemes(&ref, NULL, 0, out_len);
+  if (result == GHOSTTY_SUCCESS || result == GHOSTTY_OUT_OF_SPACE) {
+    return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  return libghostty_cpp_translate_result(result);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint32_t* out_codepoints,
+  size_t out_codepoints_len
+) {
+  if (out_codepoints == NULL && out_codepoints_len != 0) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  size_t len = 0;
+  return libghostty_cpp_translate_result(
+    ghostty_grid_ref_graphemes(&ref, out_codepoints, out_codepoints_len, &len)
   );
 }
 

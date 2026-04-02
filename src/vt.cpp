@@ -73,6 +73,44 @@ using TerminalSizeGetter =
 using TerminalStringGetter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, libghostty_cpp_string*);
 
+GridCellWide translate_grid_cell_wide(libghostty_cpp_grid_cell_wide wide) {
+  switch (wide) {
+    case LIBGHOSTTY_CPP_GRID_CELL_WIDE_NARROW:
+      return GridCellWide::Narrow;
+    case LIBGHOSTTY_CPP_GRID_CELL_WIDE_WIDE:
+      return GridCellWide::Wide;
+    case LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_TAIL:
+      return GridCellWide::SpacerTail;
+    case LIBGHOSTTY_CPP_GRID_CELL_WIDE_SPACER_HEAD:
+      return GridCellWide::SpacerHead;
+  }
+
+  throw Error(ErrorCode::InvalidValue);
+}
+
+libghostty_cpp_point translate_point(Point point) noexcept {
+  const PointCoordinate coordinate = point.coordinate();
+  libghostty_cpp_point raw_point = {};
+  raw_point.value.coordinate.x = coordinate.x;
+  raw_point.value.coordinate.y = coordinate.y;
+  switch (point.kind()) {
+    case Point::Kind::Active:
+      raw_point.tag = LIBGHOSTTY_CPP_POINT_ACTIVE;
+      break;
+    case Point::Kind::Viewport:
+      raw_point.tag = LIBGHOSTTY_CPP_POINT_VIEWPORT;
+      break;
+    case Point::Kind::Screen:
+      raw_point.tag = LIBGHOSTTY_CPP_POINT_SCREEN;
+      break;
+    case Point::Kind::History:
+      raw_point.tag = LIBGHOSTTY_CPP_POINT_HISTORY;
+      break;
+  }
+
+  return raw_point;
+}
+
 std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter getter) {
   std::uint16_t value = 0;
   detail::throw_if_error(getter(handle, &value));
@@ -472,6 +510,40 @@ void Terminal::reset() noexcept {
 
 bool Terminal::is_mode_enabled(Mode mode) const {
   return query_mode_enabled(handle_, mode);
+}
+
+GridRef Terminal::grid_ref(Point point) const {
+  const libghostty_cpp_point raw_point = translate_point(point);
+
+  libghostty_cpp_grid_ref_snapshot snapshot = {};
+  detail::throw_if_error(
+    libghostty_cpp_terminal_grid_ref_snapshot(handle_, raw_point, &snapshot)
+  );
+
+  std::size_t len = 0;
+  detail::throw_if_error(
+    libghostty_cpp_terminal_grid_ref_graphemes_len(handle_, raw_point, &len)
+  );
+
+  std::u32string graphemes;
+  if (len > 0) {
+    std::vector<std::uint32_t> codepoints(len, 0);
+    detail::throw_if_error(
+      libghostty_cpp_terminal_grid_ref_graphemes(handle_, raw_point, codepoints.data(), len)
+    );
+
+    graphemes.reserve(len);
+    for (const std::uint32_t codepoint : codepoints) {
+      graphemes.push_back(static_cast<char32_t>(codepoint));
+    }
+  }
+
+  return GridRef(
+    snapshot.row_is_wrapped,
+    snapshot.cell_has_text,
+    translate_grid_cell_wide(snapshot.cell_wide),
+    std::move(graphemes)
+  );
 }
 
 void Terminal::scroll_viewport(ScrollViewport scroll) noexcept {
