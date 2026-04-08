@@ -411,6 +411,19 @@ libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes(
   size_t out_codepoints_len
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_hyperlink_uri_len(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  size_t* out_len
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_hyperlink_uri(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint8_t* out_uri,
+  size_t out_uri_len
+);
+
 void libghostty_cpp_terminal_set_scroll_viewport(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_scroll_viewport viewport
@@ -457,6 +470,46 @@ libghostty_cpp_result libghostty_cpp_terminal_title(
 libghostty_cpp_result libghostty_cpp_terminal_pwd(
   const libghostty_cpp_terminal* terminal,
   libghostty_cpp_string* out_pwd
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_storage_limit(
+  const libghostty_cpp_terminal* terminal,
+  uint64_t* out_limit
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_storage_limit(
+  libghostty_cpp_terminal* terminal,
+  uint64_t limit
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_file_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_file_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_temp_file_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_temp_file_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_shared_mem_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_shared_mem_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
 );
 
 #ifdef __cplusplus

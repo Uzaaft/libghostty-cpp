@@ -73,4 +73,8 @@ std::string_view build_version() {
   return translate_string(get<GhosttyString>(GHOSTTY_BUILD_INFO_VERSION_BUILD));
 }
 
+std::string_view version_pre() {
+  return translate_string(get<GhosttyString>(GHOSTTY_BUILD_INFO_VERSION_PRE));
+}
+
 } // namespace libghostty_cpp::build_info

@@ -1,8 +1,10 @@
 #include "libghostty_cpp/focus.hpp"
 #include "libghostty_cpp/key.hpp"
+#include "libghostty_cpp/kitty_graphics.hpp"
 #include "libghostty_cpp/mouse.hpp"
 #include "libghostty_cpp/paste.hpp"
 #include "libghostty_cpp/render.hpp"
+#include "libghostty_cpp/sys.hpp"
 #include "libghostty_cpp/vt.hpp"
 
 #include <QApplication>
@@ -12,6 +14,7 @@
 #include <QCoreApplication>
 #include <QFocusEvent>
 #include <QFont>
+#include <QImage>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QKeyEvent>
@@ -35,6 +38,7 @@
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -91,6 +95,12 @@ struct Selection {
 struct SelectionBounds {
   libghostty_cpp::PointCoordinate start;
   libghostty_cpp::PointCoordinate end;
+};
+
+struct CellColors {
+  QColor foreground;
+  QColor background;
+  bool has_background = false;
 };
 
 struct KeyMapping {
@@ -804,6 +814,13 @@ private:
 
         return libghostty_cpp::ColorScheme::Light;
       });
+
+    constexpr std::uint64_t kKittyStorageLimit = 320 * 1024 * 1024;
+    terminal_
+      .set_kitty_image_storage_limit(kKittyStorageLimit)
+      .set_kitty_image_from_file_allowed(true)
+      .set_kitty_image_from_temp_file_allowed(true)
+      .set_kitty_image_from_shared_mem_allowed(true);
   }
 
   void apply_grid(GridMetrics metrics) {
@@ -832,6 +849,7 @@ private:
   void render_terminal(QPainter& painter) {
     render_state_.update(terminal_);
     const libghostty_cpp::RenderColors colors = render_state_.colors();
+    const libghostty_cpp::kitty_graphics::Graphics graphics = terminal_.kitty_graphics();
     const QColor background = to_qcolor(colors.background);
     const QColor foreground = to_qcolor(colors.foreground);
     const std::optional<libghostty_cpp::CursorViewport> cursor =
@@ -842,6 +860,143 @@ private:
 
     paint_error_frame_.clear();
     painter.fillRect(rect(), background);
+    render_kitty_images(
+      painter,
+      graphics,
+      libghostty_cpp::kitty_graphics::PlacementLayer::BelowBg
+    );
+    render_cells(painter, background, foreground, cursor, cursor_color, false);
+    render_kitty_images(
+      painter,
+      graphics,
+      libghostty_cpp::kitty_graphics::PlacementLayer::BelowText
+    );
+    render_cells(painter, background, foreground, cursor, cursor_color, true);
+    render_kitty_images(
+      painter,
+      graphics,
+      libghostty_cpp::kitty_graphics::PlacementLayer::AboveText
+    );
+
+    render_scrollbar(painter, foreground);
+
+    render_state_.set_dirty(libghostty_cpp::Dirty::Clean);
+  }
+
+  void render_kitty_images(
+    QPainter& painter,
+    const libghostty_cpp::kitty_graphics::Graphics& graphics,
+    libghostty_cpp::kitty_graphics::PlacementLayer layer
+  ) const {
+    auto placements = graphics.placements();
+    placements.set_layer(layer);
+
+    const double device_pixel_ratio = devicePixelRatioF();
+    while (placements.next()) {
+      std::optional<libghostty_cpp::kitty_graphics::Image> image;
+      try {
+        image = graphics.image(placements.image_id());
+      } catch (const libghostty_cpp::Error& error) {
+        if (error.code() != libghostty_cpp::ErrorCode::InvalidValue) {
+          throw;
+        }
+      }
+      if (!image.has_value()) {
+        continue;
+      }
+
+      const std::uint32_t image_width = image->width();
+      const std::uint32_t image_height = image->height();
+      if (image_width == 0 || image_height == 0) {
+        continue;
+      }
+
+      if (image->format() != libghostty_cpp::kitty_graphics::ImageFormat::Rgba) {
+        continue;
+      }
+
+      const std::size_t pixel_count = static_cast<std::size_t>(image_width)
+                                      * static_cast<std::size_t>(image_height);
+      if (pixel_count > (std::numeric_limits<std::size_t>::max() / 4U)) {
+        continue;
+      }
+
+      const std::size_t required_len = pixel_count * 4U;
+      const std::uint8_t* image_data = image->data();
+      if (image_data == nullptr || image->data_len() < required_len) {
+        continue;
+      }
+
+      const std::optional<libghostty_cpp::kitty_graphics::ViewportPos> viewport_pos =
+        placements.viewport_pos(*image, terminal_);
+      if (!viewport_pos.has_value()) {
+        continue;
+      }
+
+      const libghostty_cpp::kitty_graphics::PixelSize pixel_size =
+        placements.pixel_size(*image, terminal_);
+      if (pixel_size.width == 0 || pixel_size.height == 0) {
+        continue;
+      }
+
+      const libghostty_cpp::kitty_graphics::SourceRect source_rect =
+        placements.source_rect(*image);
+      if (source_rect.width == 0 || source_rect.height == 0) {
+        continue;
+      }
+
+      constexpr std::uint32_t kQtIntMax = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+      if (image_width > kQtIntMax
+          || image_height > kQtIntMax
+          || source_rect.x > kQtIntMax
+          || source_rect.y > kQtIntMax
+          || source_rect.width > kQtIntMax
+          || source_rect.height > kQtIntMax) {
+        continue;
+      }
+
+      const std::size_t bytes_per_line = static_cast<std::size_t>(image_width) * 4U;
+      const QImage image_frame(
+        image_data,
+        static_cast<int>(image_width),
+        static_cast<int>(image_height),
+        static_cast<qsizetype>(bytes_per_line),
+        QImage::Format_RGBA8888
+      );
+      if (image_frame.isNull()) {
+        continue;
+      }
+
+      const double dest_x = kPadding
+                            + static_cast<double>(viewport_pos->col) * grid_.cell_width
+                            + (static_cast<double>(placements.x_offset()) / device_pixel_ratio);
+      const double dest_y = kPadding
+                            + static_cast<double>(viewport_pos->row) * grid_.cell_height
+                            + (static_cast<double>(placements.y_offset()) / device_pixel_ratio);
+      const QRectF dest_rect(
+        dest_x,
+        dest_y,
+        static_cast<double>(pixel_size.width) / device_pixel_ratio,
+        static_cast<double>(pixel_size.height) / device_pixel_ratio
+      );
+      const QRect source(
+        static_cast<int>(source_rect.x),
+        static_cast<int>(source_rect.y),
+        static_cast<int>(source_rect.width),
+        static_cast<int>(source_rect.height)
+      );
+      painter.drawImage(dest_rect, image_frame, source);
+    }
+  }
+
+  void render_cells(
+    QPainter& painter,
+    const QColor& background,
+    const QColor& foreground,
+    const std::optional<libghostty_cpp::CursorViewport>& cursor,
+    const QColor& cursor_color,
+    bool render_text
+  ) {
     row_iterator_.bind(render_state_);
 
     std::uint16_t row_index = 0;
@@ -852,27 +1007,38 @@ private:
 
       std::uint16_t column_index = 0;
       while (cell_iterator_.next()) {
-        render_cell(
-          painter,
-          x,
-          y,
-          row_index,
-          column_index,
-          background,
-          foreground,
-          cursor,
-          cursor_color
-        );
+        if (render_text) {
+          render_cell_text(
+            painter,
+            x,
+            y,
+            row_index,
+            column_index,
+            background,
+            foreground,
+            cursor,
+            cursor_color
+          );
+        } else {
+          render_cell_background(
+            painter,
+            x,
+            y,
+            row_index,
+            column_index,
+            background,
+            foreground,
+            cursor,
+            cursor_color
+          );
+        }
+
         x += grid_.cell_width;
         ++column_index;
       }
 
       ++row_index;
     }
-
-    render_scrollbar(painter, foreground);
-
-    render_state_.set_dirty(libghostty_cpp::Dirty::Clean);
   }
 
   void render_scrollbar(QPainter& painter, const QColor& foreground) const {
@@ -919,7 +1085,75 @@ private:
     painter.fillRect(QRectF(track_x, thumb_y, kScrollbarWidth, thumb_height), thumb_color);
   }
 
-  void render_cell(
+  [[nodiscard]] CellColors resolve_cell_colors(
+    std::uint16_t row_index,
+    std::uint16_t column_index,
+    const QColor& background,
+    const QColor& foreground,
+    const std::optional<libghostty_cpp::CursorViewport>& cursor,
+    const QColor& cursor_color
+  ) const {
+    const libghostty_cpp::Style style = cell_iterator_.style();
+    const std::optional<libghostty_cpp::RgbColor> fg_rgb =
+      cell_iterator_.resolved_fg_color();
+    const std::optional<libghostty_cpp::RgbColor> bg_rgb =
+      cell_iterator_.resolved_bg_color();
+
+    CellColors colors{
+      fg_rgb.has_value() ? to_qcolor(*fg_rgb) : foreground,
+      bg_rgb.has_value() ? to_qcolor(*bg_rgb) : background,
+      bg_rgb.has_value(),
+    };
+
+    if (style.inverse) {
+      std::swap(colors.foreground, colors.background);
+      colors.has_background = true;
+    }
+
+    if (is_selected_cell(row_index, column_index)) {
+      QColor selection_color = foreground;
+      selection_color.setAlpha(96);
+      colors.background = selection_color;
+      colors.has_background = true;
+    }
+
+    const bool is_cursor_cell = cursor.has_value()
+                                && cursor->x == column_index
+                                && cursor->y == row_index;
+    if (is_cursor_cell) {
+      colors.background = cursor_color;
+      colors.foreground = background;
+      colors.has_background = true;
+    }
+
+    return colors;
+  }
+
+  void render_cell_background(
+    QPainter& painter,
+    double x,
+    double y,
+    std::uint16_t row_index,
+    std::uint16_t column_index,
+    const QColor& background,
+    const QColor& foreground,
+    const std::optional<libghostty_cpp::CursorViewport>& cursor,
+    const QColor& cursor_color
+  ) {
+    const CellColors colors = resolve_cell_colors(
+      row_index,
+      column_index,
+      background,
+      foreground,
+      cursor,
+      cursor_color
+    );
+    if (colors.has_background) {
+      painter.fillRect(QRectF(x, y, grid_.cell_width, grid_.cell_height), colors.background);
+    }
+  }
+
+  void render_cell_text(
     QPainter& painter,
     double x,
     double y,
@@ -932,39 +1166,14 @@ private:
   ) {
     const std::u32string graphemes = cell_iterator_.graphemes();
     const libghostty_cpp::Style style = cell_iterator_.style();
-    const std::optional<libghostty_cpp::RgbColor> fg_rgb =
-      cell_iterator_.resolved_fg_color();
-    const std::optional<libghostty_cpp::RgbColor> bg_rgb =
-      cell_iterator_.resolved_bg_color();
-
-    QColor cell_fg = fg_rgb.has_value() ? to_qcolor(*fg_rgb) : foreground;
-    QColor cell_bg = bg_rgb.has_value() ? to_qcolor(*bg_rgb) : background;
-    bool has_background = bg_rgb.has_value();
-
-    if (style.inverse) {
-      std::swap(cell_fg, cell_bg);
-      has_background = true;
-    }
-
-    if (is_selected_cell(row_index, column_index)) {
-      QColor selection_color = foreground;
-      selection_color.setAlpha(96);
-      cell_bg = selection_color;
-      has_background = true;
-    }
-
-    const bool is_cursor_cell = cursor.has_value()
-                                && cursor->x == column_index
-                                && cursor->y == row_index;
-    if (is_cursor_cell) {
-      cell_bg = cursor_color;
-      cell_fg = background;
-      has_background = true;
-    }
-
-    if (has_background) {
-      painter.fillRect(QRectF(x, y, grid_.cell_width, grid_.cell_height), cell_bg);
-    }
+    const CellColors colors = resolve_cell_colors(
+      row_index,
+      column_index,
+      background,
+      foreground,
+      cursor,
+      cursor_color
+    );
 
     if (style.invisible || graphemes.empty()) {
       return;
@@ -974,7 +1183,7 @@ private:
     cell_font.setBold(style.bold);
     cell_font.setItalic(style.italic);
     painter.setFont(cell_font);
-    painter.setPen(cell_fg);
+    painter.setPen(colors.foreground);
 
     const QString text = QString::fromUcs4(
       graphemes.data(),
@@ -1535,6 +1744,25 @@ private:
 int main(int argc, char** argv) {
   try {
     QApplication app(argc, argv);
+
+    libghostty_cpp::sys::set_png_decoder(
+      [](const std::uint8_t* data,
+         std::size_t data_len,
+         libghostty_cpp::sys::DecodedImage& out) -> bool {
+        QImage image;
+        if (!image.loadFromData(data, static_cast<int>(data_len), "PNG")) {
+          return false;
+        }
+
+        const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
+        out.width = static_cast<std::uint32_t>(rgba.width());
+        out.height = static_cast<std::uint32_t>(rgba.height());
+        out.data = rgba.constBits();
+        out.data_len = static_cast<std::size_t>(rgba.sizeInBytes());
+        return true;
+      }
+    );
+
     TerminalWidget terminal_widget;
     terminal_widget.show();
     return app.exec();

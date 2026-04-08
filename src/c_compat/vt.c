@@ -1404,6 +1404,51 @@ libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes(
   );
 }
 
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_hyperlink_uri_len(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  size_t* out_len
+) {
+  if (out_len == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  const GhosttyResult result = ghostty_grid_ref_hyperlink_uri(&ref, NULL, 0, out_len);
+  if (result == GHOSTTY_SUCCESS || result == GHOSTTY_OUT_OF_SPACE) {
+    return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  return libghostty_cpp_translate_result(result);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_hyperlink_uri(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint8_t* out_uri,
+  size_t out_uri_len
+) {
+  if (out_uri == NULL && out_uri_len != 0) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  size_t len = 0;
+  return libghostty_cpp_translate_result(
+    ghostty_grid_ref_hyperlink_uri(&ref, out_uri, out_uri_len, &len)
+  );
+}
+
 void libghostty_cpp_terminal_set_scroll_viewport(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_scroll_viewport viewport
@@ -1504,4 +1549,85 @@ libghostty_cpp_result libghostty_cpp_terminal_pwd(
   libghostty_cpp_string* out_pwd
 ) {
   return get_string(terminal, GHOSTTY_TERMINAL_DATA_PWD, out_pwd);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_storage_limit(
+  const libghostty_cpp_terminal* terminal,
+  uint64_t* out_limit
+) {
+  if (terminal == NULL || out_limit == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, GHOSTTY_TERMINAL_DATA_KITTY_IMAGE_STORAGE_LIMIT, out_limit)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_storage_limit(
+  libghostty_cpp_terminal* terminal,
+  uint64_t limit
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_set(terminal->inner, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_STORAGE_LIMIT, &limit)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_file_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_KITTY_IMAGE_MEDIUM_FILE, out_allowed);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_file_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_set(terminal->inner, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_FILE, &allowed)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_temp_file_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_KITTY_IMAGE_MEDIUM_TEMP_FILE, out_allowed);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_temp_file_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_set(terminal->inner, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_TEMP_FILE, &allowed)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_image_from_shared_mem_allowed(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_allowed
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_KITTY_IMAGE_MEDIUM_SHARED_MEM, out_allowed);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_kitty_image_from_shared_mem_allowed(
+  libghostty_cpp_terminal* terminal,
+  bool allowed
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_set(terminal->inner, GHOSTTY_TERMINAL_OPT_KITTY_IMAGE_MEDIUM_SHARED_MEM, &allowed)
+  );
 }

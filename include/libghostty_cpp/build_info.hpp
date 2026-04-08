@@ -21,5 +21,6 @@ enum class OptimizeMode {
 [[nodiscard]] std::size_t minor_version();
 [[nodiscard]] std::size_t patch_version();
 [[nodiscard]] std::string_view build_version();
+[[nodiscard]] std::string_view version_pre();
 
 } // namespace libghostty_cpp::build_info

@@ -24,7 +24,7 @@ include(FetchContent)
 FetchContent_Declare(
   ghostty
   GIT_REPOSITORY https://github.com/ghostty-org/ghostty.git
-  GIT_TAG 0a492fdb331f1e0be29aedbcc78c3c852cb437f2
+  GIT_TAG 853183e91
 )
 FetchContent_MakeAvailable(ghostty)
 
@@ -39,12 +39,14 @@ add_library(
   src/fmt.cpp
   src/focus.cpp
   src/key.cpp
+  src/kitty_graphics.cpp
   src/mouse.cpp
   src/osc.cpp
   src/paste.cpp
   src/render.cpp
   src/screen.cpp
   src/sgr.cpp
+  src/sys.cpp
   src/vt.cpp
 )
 
@@ -56,6 +58,7 @@ target_sources(
     include/libghostty_cpp/fmt.hpp
     include/libghostty_cpp/focus.hpp
     include/libghostty_cpp/key.hpp
+    include/libghostty_cpp/kitty_graphics.hpp
     include/libghostty_cpp/mouse.hpp
     include/libghostty_cpp/osc.hpp
     include/libghostty_cpp/paste.hpp
@@ -63,6 +66,7 @@ target_sources(
     include/libghostty_cpp/screen.hpp
     include/libghostty_cpp/sgr.hpp
     include/libghostty_cpp/style.hpp
+    include/libghostty_cpp/sys.hpp
     include/libghostty_cpp/terminal.hpp
     include/libghostty_cpp/vt.hpp
 )

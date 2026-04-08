@@ -72,6 +72,8 @@ using TerminalU16Getter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint16_t*);
 using TerminalU32Getter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint32_t*);
+using TerminalU64Getter =
+  libghostty_cpp_result (*)(const libghostty_cpp_terminal*, uint64_t*);
 using TerminalBoolGetter =
   libghostty_cpp_result (*)(const libghostty_cpp_terminal*, bool*);
 using TerminalSizeGetter =
@@ -132,6 +134,12 @@ std::uint16_t get_u16(const libghostty_cpp_terminal* handle, TerminalU16Getter g
 
 std::uint32_t get_u32(const libghostty_cpp_terminal* handle, TerminalU32Getter getter) {
   std::uint32_t value = 0;
+  detail::throw_if_error(getter(handle, &value));
+  return value;
+}
+
+std::uint64_t get_u64(const libghostty_cpp_terminal* handle, TerminalU64Getter getter) {
+  std::uint64_t value = 0;
   detail::throw_if_error(getter(handle, &value));
   return value;
 }
@@ -688,6 +696,22 @@ GridRef Terminal::grid_ref(Point point) const {
     }
   }
 
+  std::size_t uri_len = 0;
+  detail::throw_if_error(
+    libghostty_cpp_terminal_grid_ref_hyperlink_uri_len(handle_, raw_point, &uri_len)
+  );
+
+  std::string hyperlink_uri;
+  if (uri_len > 0) {
+    hyperlink_uri.resize(uri_len);
+    detail::throw_if_error(
+      libghostty_cpp_terminal_grid_ref_hyperlink_uri(
+        handle_, raw_point,
+        reinterpret_cast<std::uint8_t*>(hyperlink_uri.data()), uri_len
+      )
+    );
+  }
+
   return GridRef(
     screen::Row(row),
     screen::Cell(cell),
@@ -695,7 +719,8 @@ GridRef Terminal::grid_ref(Point point) const {
     snapshot.row_is_wrapped,
     snapshot.cell_has_text,
     translate_grid_cell_wide(snapshot.cell_wide),
-    std::move(graphemes)
+    std::move(graphemes),
+    std::move(hyperlink_uri)
   );
 }
 
@@ -972,6 +997,42 @@ Terminal& Terminal::set_default_color_palette(const std::array<RgbColor, 256>& v
 
 Terminal& Terminal::clear_default_color_palette() {
   set_palette_option(handle_, libghostty_cpp_terminal_set_color_palette_default, nullptr);
+  return *this;
+}
+
+std::uint64_t Terminal::kitty_image_storage_limit() const {
+  return get_u64(handle_, libghostty_cpp_terminal_kitty_image_storage_limit);
+}
+
+Terminal& Terminal::set_kitty_image_storage_limit(std::uint64_t limit) {
+  detail::throw_if_error(libghostty_cpp_terminal_set_kitty_image_storage_limit(handle_, limit));
+  return *this;
+}
+
+bool Terminal::is_kitty_image_from_file_allowed() const {
+  return get_bool(handle_, libghostty_cpp_terminal_kitty_image_from_file_allowed);
+}
+
+Terminal& Terminal::set_kitty_image_from_file_allowed(bool allowed) {
+  detail::throw_if_error(libghostty_cpp_terminal_set_kitty_image_from_file_allowed(handle_, allowed));
+  return *this;
+}
+
+bool Terminal::is_kitty_image_from_temp_file_allowed() const {
+  return get_bool(handle_, libghostty_cpp_terminal_kitty_image_from_temp_file_allowed);
+}
+
+Terminal& Terminal::set_kitty_image_from_temp_file_allowed(bool allowed) {
+  detail::throw_if_error(libghostty_cpp_terminal_set_kitty_image_from_temp_file_allowed(handle_, allowed));
+  return *this;
+}
+
+bool Terminal::is_kitty_image_from_shared_mem_allowed() const {
+  return get_bool(handle_, libghostty_cpp_terminal_kitty_image_from_shared_mem_allowed);
+}
+
+Terminal& Terminal::set_kitty_image_from_shared_mem_allowed(bool allowed) {
+  detail::throw_if_error(libghostty_cpp_terminal_set_kitty_image_from_shared_mem_allowed(handle_, allowed));
   return *this;
 }
 

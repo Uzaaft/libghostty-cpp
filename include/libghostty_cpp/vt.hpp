@@ -36,6 +36,11 @@ namespace fmt {
 class Formatter;
 }
 
+namespace kitty_graphics {
+class Graphics;
+class PlacementIterator;
+}
+
 class RenderState;
 class Terminal;
 
@@ -178,6 +183,10 @@ public:
     return style_;
   }
 
+  [[nodiscard]] const std::string &hyperlink_uri() const noexcept {
+    return hyperlink_uri_;
+  }
+
 private:
   GridRef(
     screen::Row row,
@@ -186,7 +195,8 @@ private:
     bool row_is_wrapped,
     bool cell_has_text,
     GridCellWide cell_wide,
-    std::u32string graphemes
+    std::u32string graphemes,
+    std::string hyperlink_uri
   )
       : row_(row),
         cell_(cell),
@@ -194,7 +204,8 @@ private:
         row_is_wrapped_(row_is_wrapped),
         cell_has_text_(cell_has_text),
         cell_wide_(cell_wide),
-        graphemes_(std::move(graphemes)) {}
+        graphemes_(std::move(graphemes)),
+        hyperlink_uri_(std::move(hyperlink_uri)) {}
 
   screen::Row row_;
   screen::Cell cell_;
@@ -203,6 +214,7 @@ private:
   bool cell_has_text_ = false;
   GridCellWide cell_wide_ = GridCellWide::Narrow;
   std::u32string graphemes_;
+  std::string hyperlink_uri_;
 
   friend class Terminal;
 };
@@ -423,11 +435,24 @@ public:
   Terminal &set_default_color_palette(const std::array<RgbColor, 256> &value);
   Terminal &clear_default_color_palette();
 
+  [[nodiscard]] std::uint64_t kitty_image_storage_limit() const;
+  Terminal &set_kitty_image_storage_limit(std::uint64_t limit);
+  [[nodiscard]] bool is_kitty_image_from_file_allowed() const;
+  Terminal &set_kitty_image_from_file_allowed(bool allowed);
+  [[nodiscard]] bool is_kitty_image_from_temp_file_allowed() const;
+  Terminal &set_kitty_image_from_temp_file_allowed(bool allowed);
+  [[nodiscard]] bool is_kitty_image_from_shared_mem_allowed() const;
+  Terminal &set_kitty_image_from_shared_mem_allowed(bool allowed);
+
+  [[nodiscard]] kitty_graphics::Graphics kitty_graphics() const;
+
 private:
   friend class RenderState;
   friend class key::Encoder;
   friend class mouse::Encoder;
   friend class fmt::Formatter;
+  friend class kitty_graphics::Graphics;
+  friend class kitty_graphics::PlacementIterator;
   friend struct detail::TerminalCallbacks;
 
   void release() noexcept;
