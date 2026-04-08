@@ -32,6 +32,10 @@ namespace mouse {
 class Encoder;
 }
 
+namespace fmt {
+class Formatter;
+}
+
 class RenderState;
 class Terminal;
 
@@ -423,6 +427,7 @@ private:
   friend class RenderState;
   friend class key::Encoder;
   friend class mouse::Encoder;
+  friend class fmt::Formatter;
   friend struct detail::TerminalCallbacks;
 
   void release() noexcept;

@@ -34,22 +34,34 @@ add_library(
   src/c_compat/mouse.c
   src/c_compat/render.c
   src/c_compat/vt.c
+  src/build_info.cpp
   src/error.cpp
+  src/fmt.cpp
+  src/focus.cpp
   src/key.cpp
   src/mouse.cpp
+  src/osc.cpp
+  src/paste.cpp
   src/render.cpp
   src/screen.cpp
+  src/sgr.cpp
   src/vt.cpp
 )
 
 target_sources(
   libghostty_cpp
   PRIVATE
+    include/libghostty_cpp/build_info.hpp
     include/libghostty_cpp/error.hpp
+    include/libghostty_cpp/fmt.hpp
+    include/libghostty_cpp/focus.hpp
     include/libghostty_cpp/key.hpp
     include/libghostty_cpp/mouse.hpp
+    include/libghostty_cpp/osc.hpp
+    include/libghostty_cpp/paste.hpp
     include/libghostty_cpp/render.hpp
     include/libghostty_cpp/screen.hpp
+    include/libghostty_cpp/sgr.hpp
     include/libghostty_cpp/style.hpp
     include/libghostty_cpp/terminal.hpp
     include/libghostty_cpp/vt.hpp
@@ -160,6 +172,11 @@ if(BUILD_TESTING)
     tests/vt_state.cpp
   )
 
+  add_executable(
+    libghostty_cpp_module_smoke_test
+    tests/module_smoke.cpp
+  )
+
   target_link_libraries(libghostty_cpp_key_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_mouse_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
@@ -167,6 +184,7 @@ if(BUILD_TESTING)
   target_link_libraries(libghostty_cpp_vt_modes_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_grid_ref_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_state_test PRIVATE libghostty_cpp)
+  target_link_libraries(libghostty_cpp_module_smoke_test PRIVATE libghostty_cpp)
 
   add_test(
     NAME libghostty_cpp_key_smoke_test
@@ -201,6 +219,11 @@ if(BUILD_TESTING)
   add_test(
     NAME libghostty_cpp_vt_state_test
     COMMAND libghostty_cpp_vt_state_test
+  )
+
+  add_test(
+    NAME libghostty_cpp_module_smoke_test
+    COMMAND libghostty_cpp_module_smoke_test
   )
 endif()
 

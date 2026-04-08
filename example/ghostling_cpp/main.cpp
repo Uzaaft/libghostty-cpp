@@ -1,5 +1,7 @@
+#include "libghostty_cpp/focus.hpp"
 #include "libghostty_cpp/key.hpp"
 #include "libghostty_cpp/mouse.hpp"
+#include "libghostty_cpp/paste.hpp"
 #include "libghostty_cpp/render.hpp"
 #include "libghostty_cpp/vt.hpp"
 
@@ -64,10 +66,6 @@ constexpr double kRowGap = 2.0;
 constexpr std::size_t kScrollbackLines = 1000;
 constexpr std::size_t kEncodedInputReserve = 64;
 constexpr double kWheelScrollScale = -2.5;
-constexpr std::string_view kBracketedPasteStartSequence = "\x1B[200~";
-constexpr std::string_view kBracketedPasteEndSequence = "\x1B[201~";
-constexpr std::string_view kFocusGainedSequence = "\x1B[I";
-constexpr std::string_view kFocusLostSequence = "\x1B[O";
 constexpr int kInitialWindowWidth = 1024;
 constexpr int kInitialWindowHeight = 720;
 constexpr double kScrollbarWidth = 3.0;
@@ -1253,11 +1251,10 @@ private:
       return;
     }
 
-    write_pty(focused ? kFocusGainedSequence : kFocusLostSequence);
-  }
-
-  void append_encoded_input(std::string_view data) {
-    encoded_input_.insert(encoded_input_.end(), data.begin(), data.end());
+    const std::vector<std::uint8_t> encoded = libghostty_cpp::focus::encode(
+      focused ? libghostty_cpp::focus::Event::Gained : libghostty_cpp::focus::Event::Lost
+    );
+    write_encoded_bytes(encoded);
   }
 
   [[nodiscard]] bool handle_paste() {
@@ -1285,15 +1282,11 @@ private:
     const bool bracketed_paste = is_bracketed_paste_enabled();
 
     clear_encoded_input();
-    if (bracketed_paste) {
-      append_encoded_input(kBracketedPasteStartSequence);
-    }
-
-    encoded_input_.insert(encoded_input_.end(), utf8.begin(), utf8.end());
-
-    if (bracketed_paste) {
-      append_encoded_input(kBracketedPasteEndSequence);
-    }
+    libghostty_cpp::paste::encode_to(
+      encoded_input_,
+      std::string_view(utf8.constData(), static_cast<std::size_t>(utf8.size())),
+      bracketed_paste
+    );
 
     return flush_encoded_input();
   }
