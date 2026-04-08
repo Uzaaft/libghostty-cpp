@@ -2,26 +2,43 @@
 
 #include <array>
 #include <cassert>
+#include <string_view>
 
 int main() {
+  using namespace std::literals;
+
+  using libghostty_cpp::CellSize;
+  using libghostty_cpp::GridSize;
   using libghostty_cpp::Mode;
   using libghostty_cpp::RgbColor;
   using libghostty_cpp::Terminal;
-  using libghostty_cpp::TerminalOptions;
 
-  Terminal terminal(TerminalOptions{80, 24, 128});
-  terminal.resize(80, 24, 9, 18);
+  Terminal terminal(GridSize{80, 24}, 128);
+  terminal.resize(GridSize{80, 24}, CellSize{9, 18});
+
+  assert(terminal.size().cols == 80);
+  assert(terminal.size().rows == 24);
 
   assert(terminal.width_px() == 720);
   assert(terminal.height_px() == 432);
+  assert(terminal.pixel_size().width_px == 720);
+  assert(terminal.pixel_size().height_px == 432);
 
   terminal.set_title("manual title").set_pwd("/tmp/libghostty-cpp");
   assert(terminal.title() == "manual title");
   assert(terminal.pwd() == "/tmp/libghostty-cpp");
+  assert(terminal.title_view() == "manual title"sv);
+  assert(terminal.pwd_view() == "/tmp/libghostty-cpp"sv);
 
   terminal.clear_title().clear_pwd();
   assert(terminal.title().empty());
   assert(terminal.pwd().empty());
+  assert(terminal.title_view().empty());
+  assert(terminal.pwd_view().empty());
+
+  const auto cursor_position = terminal.cursor_position();
+  assert(cursor_position.x == 0);
+  assert(cursor_position.y == 0);
 
   assert(!terminal.is_cursor_pending_wrap());
   assert(terminal.is_cursor_visible());
@@ -62,7 +79,7 @@ int main() {
   assert(!terminal.default_bg_color().has_value());
   assert(!terminal.default_cursor_color().has_value());
 
-  std::array<RgbColor, 256> palette{};
+  Terminal::ColorPalette palette{};
   palette[1] = RgbColor{0xAA, 0xBB, 0xCC};
   palette[255] = RgbColor{0x12, 0x34, 0x56};
   terminal.set_default_color_palette(palette);

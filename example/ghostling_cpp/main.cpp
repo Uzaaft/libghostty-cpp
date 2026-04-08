@@ -770,7 +770,7 @@ private:
   }
 
   void sync_window_title() {
-    const std::string_view title = terminal_.title();
+    const std::string_view title = terminal_.title_view();
     if (title.empty()) {
       setWindowTitle(QStringLiteral("ghostling-cpp"));
       return;
@@ -781,8 +781,8 @@ private:
 
   void configure_terminal() {
     terminal_
-      .on_pty_write([this](const libghostty_cpp::Terminal&, std::string_view data) {
-        write_pty(data);
+      .on_pty_write([this](const libghostty_cpp::Terminal&, libghostty_cpp::ByteView data) {
+        write_pty(data.as_string_view());
       })
       .on_bell([](const libghostty_cpp::Terminal&) { QApplication::beep(); })
       .on_size([this](const libghostty_cpp::Terminal&)

@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "libghostty_cpp/bytes.hpp"
 #include "libghostty_cpp/error.hpp"
 #include "libghostty_cpp/key.hpp"
 #include "libghostty_cpp/screen.hpp"
@@ -46,10 +47,54 @@ class RenderState;
 class Terminal;
 
 struct TerminalOptions {
-  std::uint16_t cols;
-  std::uint16_t rows;
+  std::uint16_t cols = 0;
+  std::uint16_t rows = 0;
   std::size_t max_scrollback = 0;
+
+  constexpr TerminalOptions() noexcept = default;
+
+  constexpr TerminalOptions(
+    std::uint16_t cols_value,
+    std::uint16_t rows_value,
+    std::size_t max_scrollback_value = 0
+  ) noexcept
+      : cols(cols_value), rows(rows_value), max_scrollback(max_scrollback_value) {}
+
+  constexpr TerminalOptions(struct GridSize size_value, std::size_t max_scrollback_value = 0)
+      noexcept;
+
+  [[nodiscard]] constexpr struct GridSize size() const noexcept;
 };
+
+struct GridSize {
+  std::uint16_t cols = 0;
+  std::uint16_t rows = 0;
+};
+
+struct CellSize {
+  std::uint32_t width_px = 0;
+  std::uint32_t height_px = 0;
+};
+
+struct PixelSize {
+  std::uint32_t width_px = 0;
+  std::uint32_t height_px = 0;
+};
+
+struct CursorPosition {
+  std::uint16_t x = 0;
+  std::uint16_t y = 0;
+};
+
+constexpr TerminalOptions::TerminalOptions(
+  GridSize size_value,
+  std::size_t max_scrollback_value
+) noexcept
+    : cols(size_value.cols), rows(size_value.rows), max_scrollback(max_scrollback_value) {}
+
+[[nodiscard]] constexpr GridSize TerminalOptions::size() const noexcept {
+  return GridSize{cols, rows};
+}
 
 enum class ActiveScreen : std::uint8_t {
   Primary = 0,
@@ -351,7 +396,7 @@ struct DeviceAttributes {
 };
 
 using PtyWriteCallback =
-  std::function<void(const Terminal &, std::string_view data)>;
+  std::function<void(const Terminal &, ByteView data)>;
 using BellCallback =
   std::function<void(const Terminal &)>;
 using EnquiryCallback =
@@ -370,6 +415,7 @@ using ColorSchemeCallback =
 class Terminal {
 public:
   explicit Terminal(TerminalOptions options);
+  explicit Terminal(GridSize size, std::size_t max_scrollback = 0);
   ~Terminal();
 
   Terminal(Terminal &&other) noexcept;
@@ -378,19 +424,21 @@ public:
   Terminal(const Terminal &) = delete;
   Terminal &operator=(const Terminal &) = delete;
 
+  void vt_write(ByteView data);
   void vt_write(std::string_view data);
   void reset() noexcept;
   [[nodiscard]] bool mode(Mode mode) const;
   [[nodiscard]] bool is_mode_enabled(Mode mode) const;
   Terminal &set_mode(Mode mode, bool value);
   [[nodiscard]] GridRef grid_ref(Point point) const;
+  void resize(GridSize size, CellSize cell_size = {});
   void resize(std::uint16_t cols, std::uint16_t rows,
               std::uint32_t cell_width_px = 0,
               std::uint32_t cell_height_px = 0);
   void scroll_viewport(ScrollViewport scroll) noexcept;
   void scroll_viewport_delta(std::ptrdiff_t delta) noexcept;
 
-  // Callback references are only valid for the duration of the callback.
+  // Callback arguments borrow terminal-owned state and are only valid during the callback.
   Terminal &on_pty_write(PtyWriteCallback callback);
   Terminal &on_bell(BellCallback callback);
   Terminal &on_enquiry(EnquiryCallback callback);
@@ -400,15 +448,19 @@ public:
   Terminal &on_title_changed(TitleChangedCallback callback);
   Terminal &on_color_scheme(ColorSchemeCallback callback);
 
-  // Returned views are invalidated by the next vt_write() or reset().
-  Terminal &set_title(std::string_view value);
+  Terminal &set_title(std::optional<std::string_view> value);
   Terminal &clear_title();
-  Terminal &set_pwd(std::string_view value);
+  Terminal &set_pwd(std::optional<std::string_view> value);
   Terminal &clear_pwd();
-  [[nodiscard]] std::string_view title() const;
-  [[nodiscard]] std::string_view pwd() const;
+  [[nodiscard]] std::string title() const;
+  [[nodiscard]] std::string pwd() const;
+  // Returned views are invalidated by the next vt_write() or reset().
+  [[nodiscard]] std::string_view title_view() const;
+  [[nodiscard]] std::string_view pwd_view() const;
+  [[nodiscard]] GridSize size() const;
   [[nodiscard]] std::uint16_t cols() const;
   [[nodiscard]] std::uint16_t rows() const;
+  [[nodiscard]] CursorPosition cursor_position() const;
   [[nodiscard]] std::uint16_t cursor_x() const;
   [[nodiscard]] std::uint16_t cursor_y() const;
   [[nodiscard]] bool is_cursor_pending_wrap() const;
@@ -420,6 +472,7 @@ public:
   [[nodiscard]] bool is_mouse_tracking() const;
   [[nodiscard]] std::size_t total_rows() const;
   [[nodiscard]] std::size_t scrollback_rows() const;
+  [[nodiscard]] PixelSize pixel_size() const;
   [[nodiscard]] std::uint32_t width_px() const;
   [[nodiscard]] std::uint32_t height_px() const;
   [[nodiscard]] std::optional<RgbColor> fg_color() const;
@@ -431,9 +484,10 @@ public:
   [[nodiscard]] std::optional<RgbColor> cursor_color() const;
   [[nodiscard]] std::optional<RgbColor> default_cursor_color() const;
   Terminal &set_default_cursor_color(std::optional<RgbColor> value);
-  [[nodiscard]] std::array<RgbColor, 256> color_palette() const;
-  [[nodiscard]] std::array<RgbColor, 256> default_color_palette() const;
-  Terminal &set_default_color_palette(const std::array<RgbColor, 256> &value);
+  using ColorPalette = std::array<RgbColor, 256>;
+  [[nodiscard]] ColorPalette color_palette() const;
+  [[nodiscard]] ColorPalette default_color_palette() const;
+  Terminal &set_default_color_palette(std::optional<ColorPalette> value);
   Terminal &clear_default_color_palette();
 
   [[nodiscard]] std::uint64_t kitty_image_storage_limit() const;

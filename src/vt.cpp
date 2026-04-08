@@ -187,14 +187,14 @@ std::optional<RgbColor> get_optional_color(
   return detail::translate_color(color);
 }
 
-std::array<RgbColor, 256> get_palette(
+Terminal::ColorPalette get_palette(
   const libghostty_cpp_terminal* handle,
   TerminalPaletteGetter getter
 ) {
   std::array<libghostty_cpp_rgb_color, 256> raw_palette{};
   detail::throw_if_error(getter(handle, raw_palette.data()));
 
-  std::array<RgbColor, 256> palette{};
+  Terminal::ColorPalette palette{};
   for (std::size_t i = 0; i < palette.size(); ++i) {
     palette[i] = detail::translate_color(raw_palette[i]);
   }
@@ -236,7 +236,7 @@ void set_optional_color_option(
 void set_palette_option(
   libghostty_cpp_terminal* handle,
   libghostty_cpp_result (*setter)(libghostty_cpp_terminal*, const libghostty_cpp_rgb_color*),
-  const std::array<RgbColor, 256>* value
+  const Terminal::ColorPalette* value
 ) {
   if (value == nullptr) {
     detail::throw_if_error(setter(handle, nullptr));
@@ -367,12 +367,7 @@ void dispatch_pty_write(
     return;
   }
 
-  const std::string_view view = data == nullptr
-                                 ? std::string_view {}
-                                 : std::string_view(
-                                     reinterpret_cast<const char*>(data),
-                                     len
-                                   );
+  const ByteView view{data, len};
 
   try {
     callbacks->pty_write(callbacks->terminal(handle), view);
@@ -600,6 +595,9 @@ Terminal::Terminal(TerminalOptions options) {
   callbacks_ = std::move(callbacks);
 }
 
+Terminal::Terminal(GridSize size, std::size_t max_scrollback)
+    : Terminal(TerminalOptions(size, max_scrollback)) {}
+
 Terminal::~Terminal() {
   release();
 }
@@ -626,20 +624,28 @@ Terminal& Terminal::operator=(Terminal&& other) noexcept {
   return *this;
 }
 
-void Terminal::vt_write(std::string_view data) {
+void Terminal::vt_write(ByteView data) {
+  if (data.data == nullptr && data.size != 0) {
+    throw Error(ErrorCode::InvalidValue);
+  }
+
   if (callbacks_ != nullptr) {
     callbacks_->clear_pending_exception();
   }
 
   libghostty_cpp_terminal_vt_write(
     handle_,
-    reinterpret_cast<const std::uint8_t*>(data.data()),
-    data.size()
+    data.data,
+    data.size
   );
 
   if (callbacks_ != nullptr) {
     callbacks_->rethrow_pending_exception();
   }
+}
+
+void Terminal::vt_write(std::string_view data) {
+  vt_write(ByteView(data));
 }
 
 void Terminal::reset() noexcept {
@@ -730,6 +736,10 @@ void Terminal::scroll_viewport(ScrollViewport scroll) noexcept {
 
 void Terminal::scroll_viewport_delta(std::ptrdiff_t delta) noexcept {
   scroll_viewport(ScrollViewport::delta(delta));
+}
+
+void Terminal::resize(GridSize size, CellSize cell_size) {
+  resize(size.cols, size.rows, cell_size.width_px, cell_size.height_px);
 }
 
 void Terminal::resize(
@@ -851,7 +861,7 @@ Terminal& Terminal::on_color_scheme(ColorSchemeCallback callback) {
   return *this;
 }
 
-Terminal& Terminal::set_title(std::string_view value) {
+Terminal& Terminal::set_title(std::optional<std::string_view> value) {
   set_string_option(handle_, libghostty_cpp_terminal_set_title, value);
   return *this;
 }
@@ -861,7 +871,7 @@ Terminal& Terminal::clear_title() {
   return *this;
 }
 
-Terminal& Terminal::set_pwd(std::string_view value) {
+Terminal& Terminal::set_pwd(std::optional<std::string_view> value) {
   set_string_option(handle_, libghostty_cpp_terminal_set_pwd, value);
   return *this;
 }
@@ -871,12 +881,24 @@ Terminal& Terminal::clear_pwd() {
   return *this;
 }
 
-std::string_view Terminal::title() const {
+std::string Terminal::title() const {
+  return std::string(title_view());
+}
+
+std::string Terminal::pwd() const {
+  return std::string(pwd_view());
+}
+
+std::string_view Terminal::title_view() const {
   return get_string(handle_, libghostty_cpp_terminal_title);
 }
 
-std::string_view Terminal::pwd() const {
+std::string_view Terminal::pwd_view() const {
   return get_string(handle_, libghostty_cpp_terminal_pwd);
+}
+
+GridSize Terminal::size() const {
+  return GridSize{cols(), rows()};
 }
 
 std::uint16_t Terminal::cols() const {
@@ -885,6 +907,10 @@ std::uint16_t Terminal::cols() const {
 
 std::uint16_t Terminal::rows() const {
   return get_u16(handle_, libghostty_cpp_terminal_rows);
+}
+
+CursorPosition Terminal::cursor_position() const {
+  return CursorPosition{cursor_x(), cursor_y()};
 }
 
 std::uint16_t Terminal::cursor_x() const {
@@ -935,6 +961,10 @@ std::size_t Terminal::scrollback_rows() const {
   return get_size(handle_, libghostty_cpp_terminal_scrollback_rows);
 }
 
+PixelSize Terminal::pixel_size() const {
+  return PixelSize{width_px(), height_px()};
+}
+
 std::uint32_t Terminal::width_px() const {
   return get_u32(handle_, libghostty_cpp_terminal_width_px);
 }
@@ -982,16 +1012,20 @@ Terminal& Terminal::set_default_cursor_color(std::optional<RgbColor> value) {
   return *this;
 }
 
-std::array<RgbColor, 256> Terminal::color_palette() const {
+Terminal::ColorPalette Terminal::color_palette() const {
   return get_palette(handle_, libghostty_cpp_terminal_color_palette);
 }
 
-std::array<RgbColor, 256> Terminal::default_color_palette() const {
+Terminal::ColorPalette Terminal::default_color_palette() const {
   return get_palette(handle_, libghostty_cpp_terminal_color_palette_default);
 }
 
-Terminal& Terminal::set_default_color_palette(const std::array<RgbColor, 256>& value) {
-  set_palette_option(handle_, libghostty_cpp_terminal_set_color_palette_default, &value);
+Terminal& Terminal::set_default_color_palette(std::optional<ColorPalette> value) {
+  set_palette_option(
+    handle_,
+    libghostty_cpp_terminal_set_color_palette_default,
+    value.has_value() ? &*value : nullptr
+  );
   return *this;
 }
 

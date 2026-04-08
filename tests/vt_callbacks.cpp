@@ -1,8 +1,8 @@
 #include "libghostty_cpp/vt.hpp"
 
 #include <cassert>
-#include <stdexcept>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -43,10 +43,10 @@ int main() {
 
   Terminal terminal(TerminalOptions{80, 24, 256});
   terminal
-    .on_pty_write([&](const Terminal& callback_terminal, std::string_view data) {
+    .on_pty_write([&](const Terminal& callback_terminal, libghostty_cpp::ByteView data) {
       assert(&callback_terminal == tracker.expected_terminal);
       ++tracker.pty_write_calls;
-      tracker.writes.emplace_back(data);
+      tracker.writes.emplace_back(data.as_string_view());
     })
     .on_bell([&](const Terminal& callback_terminal) {
       assert(&callback_terminal == tracker.expected_terminal);
@@ -93,6 +93,8 @@ int main() {
   tracker.expected_terminal = &moved_terminal;
   assert(moved_terminal.title().empty());
   assert(moved_terminal.pwd().empty());
+  assert(moved_terminal.title_view().empty());
+  assert(moved_terminal.pwd_view().empty());
 
   moved_terminal.vt_write("\x07");
   assert(tracker.bell_calls == 1);
@@ -124,6 +126,7 @@ int main() {
   moved_terminal.vt_write("\x1B]2;ghostling-cpp test\x1B\\");
   assert(tracker.title_changed_calls == 1);
   assert(moved_terminal.title() == "ghostling-cpp test");
+  assert(moved_terminal.title_view() == "ghostling-cpp test");
 
   assert(tracker.pty_write_calls == tracker.writes.size());
   assert(tracker.bell_calls == 1);

@@ -2,11 +2,11 @@
 
 May the Lord have mercy upon my soul.
 
-Minimal C++ wrapper around `libghostty-vt`, with the high-level API shape aligned closely to `libghostty-rs`.
+Minimal C++ wrapper around `libghostty-vt`, with the high-level API shape aligned closely to `libghostty-rs` while leaning into RAII and value-typed C++ APIs.
 
 Current wrapper coverage:
 
-- `Terminal` basics, resize, typed viewport scrolling, active screen and scrollback metadata queries, cursor and mode queries, title and pwd queries, point-based grid refs for hit-testing/traversal, typed color palette accessors, and effect callbacks
+- `Terminal` basics, byte-oriented VT IO, typed resize/value accessors, typed viewport scrolling, active screen and scrollback metadata queries, cursor and mode queries, safe title and pwd accessors with explicit borrowed views, point-based grid refs for hit-testing/traversal, typed color palette accessors, and effect callbacks
 - `RenderState` basics for render metadata, colors, dirty tracking, and row/cell traversal
 - `key` encoder and key event wrappers for VT input encoding
 - `mouse` encoder and mouse event wrappers for VT mouse encoding
@@ -56,11 +56,13 @@ cmake --build build --target ghostling_cpp
 #include "libghostty_cpp/paste.hpp"
 #include "libghostty_cpp/terminal.hpp"
 
-libghostty_cpp::Terminal terminal({80, 24, 1000});
-terminal.vt_write("hello from ghostty");
+libghostty_cpp::Terminal terminal(libghostty_cpp::GridSize{80, 24}, 1000);
+terminal.resize(libghostty_cpp::GridSize{80, 24}, libghostty_cpp::CellSize{9, 18});
+terminal.vt_write(libghostty_cpp::ByteView{"hello from ghostty"});
 
 const auto focus = libghostty_cpp::focus::encode(libghostty_cpp::focus::Event::Gained);
 const auto paste = libghostty_cpp::paste::encode("printf 'hi'\n", true);
+const std::string title = terminal.title();
 
 libghostty_cpp::fmt::Formatter formatter(
   terminal,
