@@ -38,6 +38,17 @@ int main() {
 
   assert(!libghostty_cpp::build_info::version_string().empty());
 
+  auto png_decoder = libghostty_cpp::sys::install_png_decoder(
+    [](libghostty_cpp::ByteView png_data)
+      -> std::optional<libghostty_cpp::sys::DecodedImage> {
+      assert(png_data.empty());
+      return std::nullopt;
+    }
+  );
+  assert(png_decoder.active());
+  png_decoder.reset();
+  assert(!png_decoder.active());
+
   libghostty_cpp::osc::Parser osc_parser;
   for (const char byte : std::string("2;Ghostling")) {
     osc_parser.next_byte(static_cast<std::uint8_t>(byte));

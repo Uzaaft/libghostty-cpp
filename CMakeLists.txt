@@ -53,6 +53,7 @@ add_library(
 target_sources(
   libghostty_cpp
   PRIVATE
+    include/libghostty_cpp/bytes.hpp
     include/libghostty_cpp/build_info.hpp
     include/libghostty_cpp/error.hpp
     include/libghostty_cpp/fmt.hpp

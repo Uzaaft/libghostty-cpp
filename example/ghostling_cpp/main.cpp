@@ -887,20 +887,14 @@ private:
     QPainter& painter,
     const libghostty_cpp::kitty_graphics::Graphics& graphics,
     libghostty_cpp::kitty_graphics::PlacementLayer layer
-  ) const {
-    auto placements = graphics.placements();
-    placements.set_layer(layer);
+  ) {
+    kitty_placement_iterator_.bind(graphics, layer);
 
     const double device_pixel_ratio = devicePixelRatioF();
-    while (placements.next()) {
-      std::optional<libghostty_cpp::kitty_graphics::Image> image;
-      try {
-        image = graphics.image(placements.image_id());
-      } catch (const libghostty_cpp::Error& error) {
-        if (error.code() != libghostty_cpp::ErrorCode::InvalidValue) {
-          throw;
-        }
-      }
+    while (const std::optional<libghostty_cpp::kitty_graphics::Placement> placement =
+             kitty_placement_iterator_.next()) {
+      const std::optional<libghostty_cpp::kitty_graphics::Image> image =
+        graphics.find_image(placement->image_id());
       if (!image.has_value()) {
         continue;
       }
@@ -922,25 +916,26 @@ private:
       }
 
       const std::size_t required_len = pixel_count * 4U;
-      const std::uint8_t* image_data = image->data();
-      if (image_data == nullptr || image->data_len() < required_len) {
+      const libghostty_cpp::ByteView image_bytes = image->bytes();
+      const std::uint8_t* image_data = image_bytes.data;
+      if (image_data == nullptr || image_bytes.size < required_len) {
         continue;
       }
 
       const std::optional<libghostty_cpp::kitty_graphics::ViewportPos> viewport_pos =
-        placements.viewport_pos(*image, terminal_);
+        placement->viewport_pos(*image, terminal_);
       if (!viewport_pos.has_value()) {
         continue;
       }
 
       const libghostty_cpp::kitty_graphics::PixelSize pixel_size =
-        placements.pixel_size(*image, terminal_);
+        placement->pixel_size(*image, terminal_);
       if (pixel_size.width == 0 || pixel_size.height == 0) {
         continue;
       }
 
       const libghostty_cpp::kitty_graphics::SourceRect source_rect =
-        placements.source_rect(*image);
+        placement->source_rect(*image);
       if (source_rect.width == 0 || source_rect.height == 0) {
         continue;
       }
@@ -969,10 +964,10 @@ private:
 
       const double dest_x = kPadding
                             + static_cast<double>(viewport_pos->col) * grid_.cell_width
-                            + (static_cast<double>(placements.x_offset()) / device_pixel_ratio);
+                            + (static_cast<double>(placement->x_offset()) / device_pixel_ratio);
       const double dest_y = kPadding
                             + static_cast<double>(viewport_pos->row) * grid_.cell_height
-                            + (static_cast<double>(placements.y_offset()) / device_pixel_ratio);
+                            + (static_cast<double>(placement->y_offset()) / device_pixel_ratio);
       const QRectF dest_rect(
         dest_x,
         dest_y,
@@ -1725,6 +1720,7 @@ private:
   libghostty_cpp::RenderState render_state_;
   libghostty_cpp::RowIterator row_iterator_;
   libghostty_cpp::CellIterator cell_iterator_;
+  libghostty_cpp::kitty_graphics::PlacementIterator kitty_placement_iterator_;
   libghostty_cpp::key::Encoder key_encoder_;
   libghostty_cpp::key::Event key_event_;
   libghostty_cpp::mouse::Encoder mouse_encoder_;
@@ -1745,21 +1741,26 @@ int main(int argc, char** argv) {
   try {
     QApplication app(argc, argv);
 
-    libghostty_cpp::sys::set_png_decoder(
-      [](const std::uint8_t* data,
-         std::size_t data_len,
-         libghostty_cpp::sys::DecodedImage& out) -> bool {
+    const auto png_decoder = libghostty_cpp::sys::install_png_decoder(
+      [](libghostty_cpp::ByteView png_data)
+        -> std::optional<libghostty_cpp::sys::DecodedImage> {
         QImage image;
-        if (!image.loadFromData(data, static_cast<int>(data_len), "PNG")) {
-          return false;
+        if (!image.loadFromData(png_data.data, static_cast<int>(png_data.size), "PNG")) {
+          return std::nullopt;
         }
 
         const QImage rgba = image.convertToFormat(QImage::Format_RGBA8888);
-        out.width = static_cast<std::uint32_t>(rgba.width());
-        out.height = static_cast<std::uint32_t>(rgba.height());
-        out.data = rgba.constBits();
-        out.data_len = static_cast<std::size_t>(rgba.sizeInBytes());
-        return true;
+        const std::size_t rgba_size = static_cast<std::size_t>(rgba.sizeInBytes());
+        if (rgba.constBits() == nullptr || rgba_size == 0) {
+          return std::nullopt;
+        }
+
+        libghostty_cpp::sys::DecodedImage decoded;
+        decoded.width = static_cast<std::uint32_t>(rgba.width());
+        decoded.height = static_cast<std::uint32_t>(rgba.height());
+        decoded.pixels_rgba.resize(rgba_size);
+        std::memcpy(decoded.pixels_rgba.data(), rgba.constBits(), rgba_size);
+        return decoded;
       }
     );
 

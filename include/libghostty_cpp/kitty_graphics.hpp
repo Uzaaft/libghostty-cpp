@@ -1,16 +1,19 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
-#include "libghostty_cpp/error.hpp"
-#include "libghostty_cpp/style.hpp"
+#include "libghostty_cpp/bytes.hpp"
 
 namespace libghostty_cpp {
 class Terminal;
 }
 
 namespace libghostty_cpp::kitty_graphics {
+
+class Graphics;
+class Placement;
 
 enum class ImageFormat {
   Rgb,
@@ -62,32 +65,21 @@ public:
   [[nodiscard]] std::uint32_t height() const;
   [[nodiscard]] ImageFormat format() const;
   [[nodiscard]] Compression compression() const;
-  [[nodiscard]] const std::uint8_t* data() const;
-  [[nodiscard]] std::size_t data_len() const;
+  [[nodiscard]] ByteView bytes() const;
 
 private:
   explicit Image(void* handle) noexcept : handle_(handle) {}
 
+  void ensure_handle() const;
+
   void* handle_ = nullptr;
 
   friend class Graphics;
-  friend class PlacementIterator;
+  friend class Placement;
 };
 
-class PlacementIterator {
+class Placement {
 public:
-  PlacementIterator();
-  ~PlacementIterator();
-
-  PlacementIterator(PlacementIterator&& other) noexcept;
-  PlacementIterator& operator=(PlacementIterator&& other) noexcept;
-
-  PlacementIterator(const PlacementIterator&) = delete;
-  PlacementIterator& operator=(const PlacementIterator&) = delete;
-
-  PlacementIterator& set_layer(PlacementLayer layer);
-  [[nodiscard]] bool next();
-
   [[nodiscard]] std::uint32_t image_id() const;
   [[nodiscard]] std::uint32_t placement_id() const;
   [[nodiscard]] bool is_virtual() const;
@@ -107,18 +99,48 @@ public:
   [[nodiscard]] SourceRect source_rect(const Image& image) const;
 
 private:
+  explicit Placement(const class PlacementIterator* iterator, std::size_t revision) noexcept
+      : iterator_(iterator), revision_(revision) {}
+
+  void ensure_current() const;
+  [[nodiscard]] void* handle() const;
+
+  const class PlacementIterator* iterator_ = nullptr;
+  std::size_t revision_ = 0;
+
+  friend class PlacementIterator;
+};
+
+class PlacementIterator {
+public:
+  PlacementIterator();
+  ~PlacementIterator();
+
+  PlacementIterator(PlacementIterator&& other) noexcept;
+  PlacementIterator& operator=(PlacementIterator&& other) noexcept;
+
+  PlacementIterator(const PlacementIterator&) = delete;
+  PlacementIterator& operator=(const PlacementIterator&) = delete;
+
+  PlacementIterator& bind(const Graphics& graphics, PlacementLayer layer = PlacementLayer::All);
+  [[nodiscard]] std::optional<Placement> next();
+
+private:
   void ensure_handle() const;
   void release() noexcept;
 
   void* handle_ = nullptr;
+  std::size_t revision_ = 0;
+  bool positioned_ = false;
 
+  friend class Placement;
   friend class Graphics;
 };
 
 class Graphics {
 public:
-  [[nodiscard]] Image image(std::uint32_t image_id) const;
-  [[nodiscard]] PlacementIterator placements() const;
+  [[nodiscard]] std::optional<Image> find_image(std::uint32_t image_id) const;
+  [[nodiscard]] PlacementIterator placements(PlacementLayer layer = PlacementLayer::All) const;
 
 private:
   explicit Graphics(void* handle) noexcept : handle_(handle) {}
@@ -126,6 +148,7 @@ private:
   void* handle_ = nullptr;
 
   friend class ::libghostty_cpp::Terminal;
+  friend class PlacementIterator;
 };
 
 } // namespace libghostty_cpp::kitty_graphics

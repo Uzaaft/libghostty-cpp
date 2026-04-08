@@ -38,6 +38,7 @@ class Formatter;
 
 namespace kitty_graphics {
 class Graphics;
+class Placement;
 class PlacementIterator;
 }
 
@@ -452,6 +453,7 @@ private:
   friend class mouse::Encoder;
   friend class fmt::Formatter;
   friend class kitty_graphics::Graphics;
+  friend class kitty_graphics::Placement;
   friend class kitty_graphics::PlacementIterator;
   friend struct detail::TerminalCallbacks;
 
