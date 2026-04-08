@@ -93,9 +93,12 @@ public:
   [[nodiscard]] CellWide wide() const;
   [[nodiscard]] bool has_text() const;
   [[nodiscard]] bool has_styling() const;
+  [[nodiscard]] std::uint16_t style_id() const;
   [[nodiscard]] bool has_hyperlink() const;
   [[nodiscard]] bool is_protected() const;
   [[nodiscard]] CellSemanticContent semantic_content() const;
+  [[nodiscard]] std::uint8_t bg_color_palette() const;
+  [[nodiscard]] RgbColor bg_color_rgb() const;
 
 private:
   explicit Cell(

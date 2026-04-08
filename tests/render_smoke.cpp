@@ -91,6 +91,9 @@ int main() {
   const auto styled_cell = cell_iterator.cell();
   assert(styled_cell.codepoint() == static_cast<std::uint32_t>('!'));
 
+  assert(styled_cell.has_styling());
+  static_cast<void>(styled_cell.style_id());
+
   const auto styled_style = cell_iterator.style();
   assert(std::holds_alternative<PaletteColor>(styled_style.fg_color));
   assert(std::get<PaletteColor>(styled_style.fg_color).index == 1);

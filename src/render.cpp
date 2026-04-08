@@ -216,6 +216,15 @@ bool get_cell_bool(
   return value;
 }
 
+std::uint16_t get_cell_u16(
+  std::uint64_t cell,
+  libghostty_cpp_result (*getter)(libghostty_cpp_cell, std::uint16_t *)
+) {
+  std::uint16_t value = 0;
+  detail::throw_if_error(getter(cell, &value));
+  return value;
+}
+
 } // namespace
 
 bool Style::is_default() const noexcept {
@@ -349,6 +358,25 @@ CellSemanticContent Cell::semantic_content() const {
     libghostty_cpp_cell_get_semantic_content(raw_, &semantic_content)
   );
   return translate_cell_semantic_content(semantic_content);
+}
+
+std::uint16_t Cell::style_id() const {
+  ensure_current();
+  return get_cell_u16(raw_, libghostty_cpp_cell_style_id);
+}
+
+std::uint8_t Cell::bg_color_palette() const {
+  ensure_current();
+  std::uint8_t palette = 0;
+  detail::throw_if_error(libghostty_cpp_cell_bg_color_palette(raw_, &palette));
+  return palette;
+}
+
+RgbColor Cell::bg_color_rgb() const {
+  ensure_current();
+  libghostty_cpp_rgb_color color = {};
+  detail::throw_if_error(libghostty_cpp_cell_bg_color_rgb(raw_, &color));
+  return translate_color(color);
 }
 
 RenderState::RenderState() {
