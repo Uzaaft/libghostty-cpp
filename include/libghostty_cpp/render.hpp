@@ -5,9 +5,9 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <variant>
 
 #include "libghostty_cpp/error.hpp"
+#include "libghostty_cpp/style.hpp"
 
 struct libghostty_cpp_render_state;
 struct libghostty_cpp_render_state_row_iterator;
@@ -31,44 +31,6 @@ enum class CursorVisualStyle {
   Block,
   Underline,
   BlockHollow,
-};
-
-struct RgbColor {
-  std::uint8_t r;
-  std::uint8_t g;
-  std::uint8_t b;
-};
-
-struct PaletteColor {
-  std::uint8_t index;
-};
-
-using StyleColor = std::variant<std::monostate, PaletteColor, RgbColor>;
-
-enum class Underline {
-  None,
-  Single,
-  Double,
-  Curly,
-  Dotted,
-  Dashed,
-};
-
-struct Style {
-  StyleColor fg_color;
-  StyleColor bg_color;
-  StyleColor underline_color;
-  bool bold = false;
-  bool italic = false;
-  bool faint = false;
-  bool blink = false;
-  bool inverse = false;
-  bool invisible = false;
-  bool strikethrough = false;
-  bool overline = false;
-  Underline underline = Underline::None;
-
-  [[nodiscard]] bool is_default() const noexcept;
 };
 
 enum class RowSemanticPrompt {

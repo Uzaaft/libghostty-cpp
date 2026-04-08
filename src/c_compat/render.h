@@ -1,5 +1,6 @@
 #pragma once
 
+#include "c_compat/style.h"
 #include "c_compat/vt.h"
 
 #include <stdbool.h>
@@ -29,53 +30,6 @@ typedef enum libghostty_cpp_cursor_visual_style {
   LIBGHOSTTY_CPP_CURSOR_VISUAL_STYLE_UNDERLINE = 2,
   LIBGHOSTTY_CPP_CURSOR_VISUAL_STYLE_BLOCK_HOLLOW = 3,
 } libghostty_cpp_cursor_visual_style;
-
-typedef struct libghostty_cpp_rgb_color {
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
-} libghostty_cpp_rgb_color;
-
-typedef enum libghostty_cpp_underline {
-  LIBGHOSTTY_CPP_UNDERLINE_NONE = 0,
-  LIBGHOSTTY_CPP_UNDERLINE_SINGLE = 1,
-  LIBGHOSTTY_CPP_UNDERLINE_DOUBLE = 2,
-  LIBGHOSTTY_CPP_UNDERLINE_CURLY = 3,
-  LIBGHOSTTY_CPP_UNDERLINE_DOTTED = 4,
-  LIBGHOSTTY_CPP_UNDERLINE_DASHED = 5,
-} libghostty_cpp_underline;
-
-typedef enum libghostty_cpp_style_color_tag {
-  LIBGHOSTTY_CPP_STYLE_COLOR_NONE = 0,
-  LIBGHOSTTY_CPP_STYLE_COLOR_PALETTE = 1,
-  LIBGHOSTTY_CPP_STYLE_COLOR_RGB = 2,
-} libghostty_cpp_style_color_tag;
-
-typedef union libghostty_cpp_style_color_value {
-  uint8_t palette;
-  libghostty_cpp_rgb_color rgb;
-  uint64_t _padding;
-} libghostty_cpp_style_color_value;
-
-typedef struct libghostty_cpp_style_color {
-  libghostty_cpp_style_color_tag tag;
-  libghostty_cpp_style_color_value value;
-} libghostty_cpp_style_color;
-
-typedef struct libghostty_cpp_style {
-  libghostty_cpp_style_color fg_color;
-  libghostty_cpp_style_color bg_color;
-  libghostty_cpp_style_color underline_color;
-  bool bold;
-  bool italic;
-  bool faint;
-  bool blink;
-  bool inverse;
-  bool invisible;
-  bool strikethrough;
-  bool overline;
-  libghostty_cpp_underline underline;
-} libghostty_cpp_style;
 
 typedef enum libghostty_cpp_row_semantic_prompt {
   LIBGHOSTTY_CPP_ROW_SEMANTIC_PROMPT_NONE = 0,
@@ -330,6 +284,11 @@ libghostty_cpp_result libghostty_cpp_cell_has_styling(
   bool *out_has_styling
 );
 
+libghostty_cpp_result libghostty_cpp_cell_style_id(
+  libghostty_cpp_cell cell,
+  uint16_t *out_style_id
+);
+
 libghostty_cpp_result libghostty_cpp_cell_has_hyperlink(
   libghostty_cpp_cell cell,
   bool *out_has_hyperlink
@@ -343,6 +302,16 @@ libghostty_cpp_result libghostty_cpp_cell_is_protected(
 libghostty_cpp_result libghostty_cpp_cell_get_semantic_content(
   libghostty_cpp_cell cell,
   libghostty_cpp_cell_semantic_content *out_semantic_content
+);
+
+libghostty_cpp_result libghostty_cpp_cell_bg_color_palette(
+  libghostty_cpp_cell cell,
+  uint8_t *out_palette
+);
+
+libghostty_cpp_result libghostty_cpp_cell_bg_color_rgb(
+  libghostty_cpp_cell cell,
+  libghostty_cpp_rgb_color *out_color
 );
 
 #ifdef __cplusplus

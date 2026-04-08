@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -11,6 +12,9 @@
 #include <vector>
 
 #include "libghostty_cpp/error.hpp"
+#include "libghostty_cpp/key.hpp"
+#include "libghostty_cpp/screen.hpp"
+#include "libghostty_cpp/style.hpp"
 
 struct libghostty_cpp_terminal;
 
@@ -22,10 +26,6 @@ struct TerminalCallbacks;
 constexpr std::uint16_t pack_mode(std::uint16_t value, bool is_ansi) noexcept {
   return static_cast<std::uint16_t>((value & 0x7FFFu) | (is_ansi ? 0x8000u : 0u));
 }
-}
-
-namespace key {
-class Encoder;
 }
 
 namespace mouse {
@@ -138,12 +138,7 @@ private:
   std::ptrdiff_t delta_;
 };
 
-enum class GridCellWide : std::uint8_t {
-  Narrow = 0,
-  Wide = 1,
-  SpacerTail = 2,
-  SpacerHead = 3,
-};
+using GridCellWide = screen::CellWide;
 
 class GridRef {
 public:
@@ -163,18 +158,43 @@ public:
     return graphemes_;
   }
 
+  [[nodiscard]] std::size_t graphemes_len() const noexcept {
+    return graphemes_.size();
+  }
+
+  [[nodiscard]] screen::Row row() const noexcept {
+    return row_;
+  }
+
+  [[nodiscard]] screen::Cell cell() const noexcept {
+    return cell_;
+  }
+
+  [[nodiscard]] const Style &style() const noexcept {
+    return style_;
+  }
+
 private:
   GridRef(
+    screen::Row row,
+    screen::Cell cell,
+    Style style,
     bool row_is_wrapped,
     bool cell_has_text,
     GridCellWide cell_wide,
     std::u32string graphemes
   )
-      : row_is_wrapped_(row_is_wrapped),
+      : row_(row),
+        cell_(cell),
+        style_(std::move(style)),
+        row_is_wrapped_(row_is_wrapped),
         cell_has_text_(cell_has_text),
         cell_wide_(cell_wide),
         graphemes_(std::move(graphemes)) {}
 
+  screen::Row row_;
+  screen::Cell cell_;
+  Style style_;
   bool row_is_wrapped_ = false;
   bool cell_has_text_ = false;
   GridCellWide cell_wide_ = GridCellWide::Narrow;
@@ -317,6 +337,8 @@ using PtyWriteCallback =
   std::function<void(const Terminal &, std::string_view data)>;
 using BellCallback =
   std::function<void(const Terminal &)>;
+using EnquiryCallback =
+  std::function<std::optional<std::string>(const Terminal &)>;
 using SizeCallback =
   std::function<std::optional<SizeReportSize>(const Terminal &)>;
 using DeviceAttributesCallback =
@@ -341,7 +363,9 @@ public:
 
   void vt_write(std::string_view data);
   void reset() noexcept;
+  [[nodiscard]] bool mode(Mode mode) const;
   [[nodiscard]] bool is_mode_enabled(Mode mode) const;
+  Terminal &set_mode(Mode mode, bool value);
   [[nodiscard]] GridRef grid_ref(Point point) const;
   void resize(std::uint16_t cols, std::uint16_t rows,
               std::uint32_t cell_width_px = 0,
@@ -352,6 +376,7 @@ public:
   // Callback references are only valid for the duration of the callback.
   Terminal &on_pty_write(PtyWriteCallback callback);
   Terminal &on_bell(BellCallback callback);
+  Terminal &on_enquiry(EnquiryCallback callback);
   Terminal &on_size(SizeCallback callback);
   Terminal &on_device_attributes(DeviceAttributesCallback callback);
   Terminal &on_xtversion(XtversionCallback callback);
@@ -359,17 +384,40 @@ public:
   Terminal &on_color_scheme(ColorSchemeCallback callback);
 
   // Returned views are invalidated by the next vt_write() or reset().
+  Terminal &set_title(std::string_view value);
+  Terminal &clear_title();
+  Terminal &set_pwd(std::string_view value);
+  Terminal &clear_pwd();
   [[nodiscard]] std::string_view title() const;
   [[nodiscard]] std::string_view pwd() const;
   [[nodiscard]] std::uint16_t cols() const;
   [[nodiscard]] std::uint16_t rows() const;
   [[nodiscard]] std::uint16_t cursor_x() const;
   [[nodiscard]] std::uint16_t cursor_y() const;
+  [[nodiscard]] bool is_cursor_pending_wrap() const;
+  [[nodiscard]] bool is_cursor_visible() const;
+  [[nodiscard]] key::KittyKeyFlags kitty_keyboard_flags() const;
+  [[nodiscard]] Style cursor_style() const;
   [[nodiscard]] ActiveScreen active_screen() const;
   [[nodiscard]] Scrollbar scrollbar() const;
   [[nodiscard]] bool is_mouse_tracking() const;
   [[nodiscard]] std::size_t total_rows() const;
   [[nodiscard]] std::size_t scrollback_rows() const;
+  [[nodiscard]] std::uint32_t width_px() const;
+  [[nodiscard]] std::uint32_t height_px() const;
+  [[nodiscard]] std::optional<RgbColor> fg_color() const;
+  [[nodiscard]] std::optional<RgbColor> default_fg_color() const;
+  Terminal &set_default_fg_color(std::optional<RgbColor> value);
+  [[nodiscard]] std::optional<RgbColor> bg_color() const;
+  [[nodiscard]] std::optional<RgbColor> default_bg_color() const;
+  Terminal &set_default_bg_color(std::optional<RgbColor> value);
+  [[nodiscard]] std::optional<RgbColor> cursor_color() const;
+  [[nodiscard]] std::optional<RgbColor> default_cursor_color() const;
+  Terminal &set_default_cursor_color(std::optional<RgbColor> value);
+  [[nodiscard]] std::array<RgbColor, 256> color_palette() const;
+  [[nodiscard]] std::array<RgbColor, 256> default_color_palette() const;
+  Terminal &set_default_color_palette(const std::array<RgbColor, 256> &value);
+  Terminal &clear_default_color_palette();
 
 private:
   friend class RenderState;

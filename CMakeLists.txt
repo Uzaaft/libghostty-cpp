@@ -24,7 +24,7 @@ include(FetchContent)
 FetchContent_Declare(
   ghostty
   GIT_REPOSITORY https://github.com/ghostty-org/ghostty.git
-  GIT_TAG bebca84668947bfc92b9a30ed58712e1c34eee1d
+  GIT_TAG 0a492fdb331f1e0be29aedbcc78c3c852cb437f2
 )
 FetchContent_MakeAvailable(ghostty)
 
@@ -38,6 +38,7 @@ add_library(
   src/key.cpp
   src/mouse.cpp
   src/render.cpp
+  src/screen.cpp
   src/vt.cpp
 )
 
@@ -48,6 +49,9 @@ target_sources(
     include/libghostty_cpp/key.hpp
     include/libghostty_cpp/mouse.hpp
     include/libghostty_cpp/render.hpp
+    include/libghostty_cpp/screen.hpp
+    include/libghostty_cpp/style.hpp
+    include/libghostty_cpp/terminal.hpp
     include/libghostty_cpp/vt.hpp
 )
 
@@ -151,12 +155,18 @@ if(BUILD_TESTING)
     tests/vt_grid_ref.cpp
   )
 
+  add_executable(
+    libghostty_cpp_vt_state_test
+    tests/vt_state.cpp
+  )
+
   target_link_libraries(libghostty_cpp_key_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_mouse_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_render_smoke_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_callbacks_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_modes_test PRIVATE libghostty_cpp)
   target_link_libraries(libghostty_cpp_vt_grid_ref_test PRIVATE libghostty_cpp)
+  target_link_libraries(libghostty_cpp_vt_state_test PRIVATE libghostty_cpp)
 
   add_test(
     NAME libghostty_cpp_key_smoke_test
@@ -186,6 +196,11 @@ if(BUILD_TESTING)
   add_test(
     NAME libghostty_cpp_vt_grid_ref_test
     COMMAND libghostty_cpp_vt_grid_ref_test
+  )
+
+  add_test(
+    NAME libghostty_cpp_vt_state_test
+    COMMAND libghostty_cpp_vt_state_test
   )
 endif()
 

@@ -360,6 +360,20 @@ static libghostty_cpp_result cell_get_u32(
   );
 }
 
+static libghostty_cpp_result cell_get_u16(
+  libghostty_cpp_cell cell,
+  GhosttyCellData data,
+  uint16_t *out_value
+) {
+  if (out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_cell_get((GhosttyCell) cell, data, out_value)
+  );
+}
+
 libghostty_cpp_result libghostty_cpp_render_state_new(
   libghostty_cpp_render_state **render_state
 ) {
@@ -1058,6 +1072,13 @@ libghostty_cpp_result libghostty_cpp_cell_has_styling(
   return cell_get_bool(cell, GHOSTTY_CELL_DATA_HAS_STYLING, out_has_styling);
 }
 
+libghostty_cpp_result libghostty_cpp_cell_style_id(
+  libghostty_cpp_cell cell,
+  uint16_t *out_style_id
+) {
+  return cell_get_u16(cell, GHOSTTY_CELL_DATA_STYLE_ID, out_style_id);
+}
+
 libghostty_cpp_result libghostty_cpp_cell_has_hyperlink(
   libghostty_cpp_cell cell,
   bool *out_has_hyperlink
@@ -1091,4 +1112,39 @@ libghostty_cpp_result libghostty_cpp_cell_get_semantic_content(
   }
 
   return translate_cell_semantic_content(semantic_content, out_semantic_content);
+}
+
+libghostty_cpp_result libghostty_cpp_cell_bg_color_palette(
+  libghostty_cpp_cell cell,
+  uint8_t *out_palette
+) {
+  if (out_palette == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_cell_get((GhosttyCell) cell, GHOSTTY_CELL_DATA_COLOR_PALETTE, out_palette)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_cell_bg_color_rgb(
+  libghostty_cpp_cell cell,
+  libghostty_cpp_rgb_color *out_color
+) {
+  if (out_color == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyColorRgb color = {0};
+  const GhosttyResult result = ghostty_cell_get(
+    (GhosttyCell) cell,
+    GHOSTTY_CELL_DATA_COLOR_RGB,
+    &color
+  );
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  *out_color = translate_color(color);
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
 }

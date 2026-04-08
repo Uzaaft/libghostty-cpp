@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "c_compat/style.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -136,6 +138,11 @@ typedef void (*libghostty_cpp_terminal_bell_fn)(
   void* userdata
 );
 
+typedef libghostty_cpp_string (*libghostty_cpp_terminal_enquiry_fn)(
+  const libghostty_cpp_terminal* terminal,
+  void* userdata
+);
+
 typedef bool (*libghostty_cpp_terminal_size_fn)(
   const libghostty_cpp_terminal* terminal,
   void* userdata,
@@ -186,6 +193,11 @@ libghostty_cpp_result libghostty_cpp_terminal_on_bell(
   libghostty_cpp_terminal_bell_fn callback
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_on_enquiry(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_enquiry_fn callback
+);
+
 libghostty_cpp_result libghostty_cpp_terminal_on_size(
   libghostty_cpp_terminal* terminal,
   libghostty_cpp_terminal_size_fn callback
@@ -225,6 +237,32 @@ libghostty_cpp_result libghostty_cpp_terminal_mode_get(
   bool* out_value
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_mode_set(
+  libghostty_cpp_terminal* terminal,
+  uint16_t mode,
+  bool value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_pending_wrap(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_visible(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_keyboard_flags(
+  const libghostty_cpp_terminal* terminal,
+  uint8_t* out_value
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_style(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_style* out_style
+);
+
 libghostty_cpp_result libghostty_cpp_terminal_mouse_tracking(
   const libghostty_cpp_terminal* terminal,
   bool* out_value
@@ -250,10 +288,114 @@ libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
   size_t* out_scrollback_rows
 );
 
+libghostty_cpp_result libghostty_cpp_terminal_width_px(
+  const libghostty_cpp_terminal* terminal,
+  uint32_t* out_width_px
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_height_px(
+  const libghostty_cpp_terminal* terminal,
+  uint32_t* out_height_px
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_foreground(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_foreground_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_background(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_background_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_cursor(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_cursor_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_palette(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_rgb_color* out_palette
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_color_palette_default(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_rgb_color* out_palette
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_title(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_string* title
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_pwd(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_string* pwd
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_foreground_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_background_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_cursor_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_palette_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* colors
+);
+
 libghostty_cpp_result libghostty_cpp_terminal_grid_ref_snapshot(
   const libghostty_cpp_terminal* terminal,
   libghostty_cpp_point point,
   libghostty_cpp_grid_ref_snapshot* out_snapshot
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_row(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint64_t* out_row
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_cell(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint64_t* out_cell
+);
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_style(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  libghostty_cpp_style* out_style
 );
 
 libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes_len(

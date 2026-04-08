@@ -1,6 +1,7 @@
 #include "libghostty_cpp/vt.hpp"
 
 #include <cassert>
+#include <variant>
 
 int main() {
   using libghostty_cpp::Error;
@@ -11,6 +12,8 @@ int main() {
   using libghostty_cpp::ScrollViewport;
   using libghostty_cpp::Terminal;
   using libghostty_cpp::TerminalOptions;
+  using libghostty_cpp::screen::CellContentTag;
+  using libghostty_cpp::screen::CellWide;
 
   Terminal wrapped_terminal{TerminalOptions{4, 2, 64}};
   wrapped_terminal.vt_write("ABCDE");
@@ -21,6 +24,10 @@ int main() {
   assert(wrapped_head.cell_has_text());
   assert(wrapped_head.cell_wide() == GridCellWide::Narrow);
   assert(wrapped_head.graphemes() == U"A");
+  assert(wrapped_head.row().is_wrapped());
+  assert(wrapped_head.cell().content_tag() == CellContentTag::Codepoint);
+  assert(wrapped_head.cell().wide() == CellWide::Narrow);
+  assert(wrapped_head.style().is_default());
 
   const libghostty_cpp::GridRef wrapped_tail =
     wrapped_terminal.grid_ref(Point::viewport(PointCoordinate{0, 1}));
@@ -42,6 +49,16 @@ int main() {
   assert(!wide_spacer.cell_has_text());
   assert(wide_spacer.cell_wide() == GridCellWide::SpacerTail);
   assert(wide_spacer.graphemes().empty());
+  assert(wide_spacer.cell().wide() == CellWide::SpacerTail);
+
+  Terminal styled_terminal{TerminalOptions{4, 2, 64}};
+  styled_terminal.vt_write("\x1B[31m!\x1B[0m");
+
+  const libghostty_cpp::GridRef styled =
+    styled_terminal.grid_ref(Point::viewport(PointCoordinate{0, 0}));
+  assert(styled.cell().has_styling());
+  assert(std::holds_alternative<libghostty_cpp::PaletteColor>(styled.style().fg_color));
+  assert(std::get<libghostty_cpp::PaletteColor>(styled.style().fg_color).index == 1);
 
   Terminal scroll_terminal{TerminalOptions{4, 2, 64}};
   scroll_terminal.vt_write("1\r\n2\r\n3");

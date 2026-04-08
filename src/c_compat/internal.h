@@ -9,6 +9,7 @@ struct libghostty_cpp_terminal {
   void* callback_userdata;
   libghostty_cpp_terminal_pty_write_fn pty_write;
   libghostty_cpp_terminal_bell_fn bell;
+  libghostty_cpp_terminal_enquiry_fn enquiry;
   libghostty_cpp_terminal_size_fn size;
   libghostty_cpp_terminal_device_attributes_fn device_attributes;
   libghostty_cpp_terminal_xtversion_fn xtversion;

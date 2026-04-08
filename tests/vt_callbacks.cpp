@@ -21,6 +21,7 @@ int main() {
     const Terminal* expected_terminal = nullptr;
     std::size_t pty_write_calls = 0;
     std::size_t bell_calls = 0;
+    std::size_t enquiry_calls = 0;
     std::size_t size_calls = 0;
     std::size_t device_attributes_calls = 0;
     std::size_t xtversion_calls = 0;
@@ -50,6 +51,12 @@ int main() {
     .on_bell([&](const Terminal& callback_terminal) {
       assert(&callback_terminal == tracker.expected_terminal);
       ++tracker.bell_calls;
+    })
+    .on_enquiry([&](const Terminal& callback_terminal)
+                  -> std::optional<std::string> {
+      assert(&callback_terminal == tracker.expected_terminal);
+      ++tracker.enquiry_calls;
+      return std::string("ghostling-enquiry");
     })
     .on_size([&](const Terminal& callback_terminal)
                -> std::optional<SizeReportSize> {
@@ -90,6 +97,9 @@ int main() {
   moved_terminal.vt_write("\x07");
   assert(tracker.bell_calls == 1);
 
+  moved_terminal.vt_write("\x05");
+  assert(tracker.writes.back() == "ghostling-enquiry");
+
   moved_terminal.vt_write("\x1B[?7$p");
   assert(tracker.writes.back() == "\x1B[?7;1$y");
 
@@ -117,6 +127,7 @@ int main() {
 
   assert(tracker.pty_write_calls == tracker.writes.size());
   assert(tracker.bell_calls == 1);
+  assert(tracker.enquiry_calls == 1);
   assert(tracker.size_calls == 1);
   assert(tracker.device_attributes_calls == 3);
   assert(tracker.xtversion_calls == 1);

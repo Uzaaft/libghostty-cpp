@@ -35,6 +35,7 @@ typedef union libghostty_cpp_terminal_option_value {
   const void* value;
   GhosttyTerminalWritePtyFn pty_write;
   GhosttyTerminalBellFn bell;
+  GhosttyTerminalEnquiryFn enquiry;
   GhosttyTerminalSizeFn size;
   GhosttyTerminalDeviceAttributesFn device_attributes;
   GhosttyTerminalXtversionFn xtversion;
@@ -48,6 +49,10 @@ _Static_assert(
 );
 _Static_assert(
   sizeof(const void*) == sizeof(GhosttyTerminalBellFn),
+  "Ghostty callback pointers must fit in a const void *"
+);
+_Static_assert(
+  sizeof(const void*) == sizeof(GhosttyTerminalEnquiryFn),
   "Ghostty callback pointers must fit in a const void *"
 );
 _Static_assert(
@@ -84,6 +89,13 @@ static const void* option_value_from_bell(
   GhosttyTerminalBellFn callback
 ) {
   libghostty_cpp_terminal_option_value option_value = {.bell = callback};
+  return option_value.value;
+}
+
+static const void* option_value_from_enquiry(
+  GhosttyTerminalEnquiryFn callback
+) {
+  libghostty_cpp_terminal_option_value option_value = {.enquiry = callback};
   return option_value.value;
 }
 
@@ -135,6 +147,116 @@ static GhosttyString to_ghostty_string(libghostty_cpp_string value) {
     .ptr = value.data,
     .len = value.len,
   };
+}
+
+static libghostty_cpp_rgb_color translate_color(GhosttyColorRgb color) {
+  return (libghostty_cpp_rgb_color) {
+    .r = color.r,
+    .g = color.g,
+    .b = color.b,
+  };
+}
+
+static GhosttyColorRgb to_ghostty_color_rgb(libghostty_cpp_rgb_color color) {
+  return (GhosttyColorRgb) {
+    .r = color.r,
+    .g = color.g,
+    .b = color.b,
+  };
+}
+
+static libghostty_cpp_result translate_underline(
+  GhosttySgrUnderline underline,
+  libghostty_cpp_underline* out_underline
+) {
+  if (out_underline == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  switch (underline) {
+    case GHOSTTY_SGR_UNDERLINE_NONE:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_NONE;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_SGR_UNDERLINE_SINGLE:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_SINGLE;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_SGR_UNDERLINE_DOUBLE:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_DOUBLE;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_SGR_UNDERLINE_CURLY:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_CURLY;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_SGR_UNDERLINE_DOTTED:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_DOTTED;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_SGR_UNDERLINE_DASHED:
+      *out_underline = LIBGHOSTTY_CPP_UNDERLINE_DASHED;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+}
+
+static libghostty_cpp_result translate_style_color(
+  GhosttyStyleColor color,
+  libghostty_cpp_style_color* out_color
+) {
+  if (out_color == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  switch (color.tag) {
+    case GHOSTTY_STYLE_COLOR_NONE:
+      out_color->tag = LIBGHOSTTY_CPP_STYLE_COLOR_NONE;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_STYLE_COLOR_PALETTE:
+      out_color->tag = LIBGHOSTTY_CPP_STYLE_COLOR_PALETTE;
+      out_color->value.palette = color.value.palette;
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+    case GHOSTTY_STYLE_COLOR_RGB:
+      out_color->tag = LIBGHOSTTY_CPP_STYLE_COLOR_RGB;
+      out_color->value.rgb = translate_color(color.value.rgb);
+      return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+}
+
+static libghostty_cpp_result translate_style(
+  GhosttyStyle style,
+  libghostty_cpp_style* out_style
+) {
+  if (out_style == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  const libghostty_cpp_result fg_result =
+    translate_style_color(style.fg_color, &out_style->fg_color);
+  if (fg_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return fg_result;
+  }
+
+  const libghostty_cpp_result bg_result =
+    translate_style_color(style.bg_color, &out_style->bg_color);
+  if (bg_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return bg_result;
+  }
+
+  const libghostty_cpp_result underline_color_result =
+    translate_style_color(style.underline_color, &out_style->underline_color);
+  if (underline_color_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return underline_color_result;
+  }
+
+  out_style->bold = style.bold;
+  out_style->italic = style.italic;
+  out_style->faint = style.faint;
+  out_style->blink = style.blink;
+  out_style->inverse = style.inverse;
+  out_style->invisible = style.invisible;
+  out_style->strikethrough = style.strikethrough;
+  out_style->overline = style.overline;
+  return translate_underline((GhosttySgrUnderline) style.underline, &out_style->underline);
 }
 
 static bool to_ghostty_color_scheme(
@@ -294,6 +416,18 @@ static void on_bell(
   wrapper->bell(wrapper, wrapper->callback_userdata);
 }
 
+static GhosttyString on_enquiry(
+  GhosttyTerminal terminal,
+  void* userdata
+) {
+  libghostty_cpp_terminal* wrapper = terminal_from_userdata(terminal, userdata);
+  if (wrapper == NULL || wrapper->enquiry == NULL) {
+    return (GhosttyString) {.ptr = NULL, .len = 0};
+  }
+
+  return to_ghostty_string(wrapper->enquiry(wrapper, wrapper->callback_userdata));
+}
+
 static bool on_size(
   GhosttyTerminal terminal,
   void* userdata,
@@ -414,6 +548,20 @@ static libghostty_cpp_result get_bool(
   );
 }
 
+static libghostty_cpp_result get_u32(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  uint32_t* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, data, out_value)
+  );
+}
+
 static libghostty_cpp_result get_size(
   const libghostty_cpp_terminal* terminal,
   GhosttyTerminalData data,
@@ -440,6 +588,114 @@ static libghostty_cpp_result get_string(
   return libghostty_cpp_translate_result(
     ghostty_terminal_get(terminal->inner, data, out_value)
   );
+}
+
+static libghostty_cpp_result get_optional_color(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  if (terminal == NULL || out_has_value == NULL || out_color == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyColorRgb color = {0};
+  const GhosttyResult result = ghostty_terminal_get(terminal->inner, data, &color);
+  if (result == GHOSTTY_NO_VALUE) {
+    *out_has_value = false;
+    *out_color = (libghostty_cpp_rgb_color) {0, 0, 0};
+    return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+  }
+
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  *out_has_value = true;
+  *out_color = translate_color(color);
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+static libghostty_cpp_result get_palette(
+  const libghostty_cpp_terminal* terminal,
+  GhosttyTerminalData data,
+  libghostty_cpp_rgb_color* out_palette
+) {
+  if (terminal == NULL || out_palette == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyColorRgb colors[256] = {0};
+  const GhosttyResult result = ghostty_terminal_get(terminal->inner, data, colors);
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  for (size_t i = 0; i < 256; ++i) {
+    out_palette[i] = translate_color(colors[i]);
+  }
+
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+static libghostty_cpp_result set_string_option(
+  libghostty_cpp_terminal* terminal,
+  GhosttyTerminalOption option,
+  const libghostty_cpp_string* value
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyString raw = {0};
+  const GhosttyString* raw_ptr = NULL;
+  if (value != NULL) {
+    raw = to_ghostty_string(*value);
+    raw_ptr = &raw;
+  }
+
+  return set_terminal_option(terminal, option, raw_ptr);
+}
+
+static libghostty_cpp_result set_optional_color_option(
+  libghostty_cpp_terminal* terminal,
+  GhosttyTerminalOption option,
+  const libghostty_cpp_rgb_color* color
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyColorRgb raw = {0};
+  const GhosttyColorRgb* raw_ptr = NULL;
+  if (color != NULL) {
+    raw = to_ghostty_color_rgb(*color);
+    raw_ptr = &raw;
+  }
+
+  return set_terminal_option(terminal, option, raw_ptr);
+}
+
+static libghostty_cpp_result set_palette_option(
+  libghostty_cpp_terminal* terminal,
+  GhosttyTerminalOption option,
+  const libghostty_cpp_rgb_color* colors
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyColorRgb raw_colors[256] = {0};
+  const GhosttyColorRgb* raw_ptr = NULL;
+  if (colors != NULL) {
+    for (size_t i = 0; i < 256; ++i) {
+      raw_colors[i] = to_ghostty_color_rgb(colors[i]);
+    }
+    raw_ptr = raw_colors;
+  }
+
+  return set_terminal_option(terminal, option, raw_ptr);
 }
 
 libghostty_cpp_result libghostty_cpp_terminal_new(
@@ -537,6 +793,22 @@ libghostty_cpp_result libghostty_cpp_terminal_on_bell(
     terminal,
     GHOSTTY_TERMINAL_OPT_BELL,
     callback != NULL ? option_value_from_bell(on_bell) : NULL
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_on_enquiry(
+  libghostty_cpp_terminal* terminal,
+  libghostty_cpp_terminal_enquiry_fn callback
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  terminal->enquiry = callback;
+  return set_terminal_option(
+    terminal,
+    GHOSTTY_TERMINAL_OPT_ENQUIRY,
+    callback != NULL ? option_value_from_enquiry(on_enquiry) : NULL
   );
 }
 
@@ -659,6 +931,68 @@ libghostty_cpp_result libghostty_cpp_terminal_mode_get(
   );
 }
 
+libghostty_cpp_result libghostty_cpp_terminal_mode_set(
+  libghostty_cpp_terminal* terminal,
+  uint16_t mode,
+  bool value
+) {
+  if (terminal == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_mode_set(terminal->inner, mode, value)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_pending_wrap(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_PENDING_WRAP, out_value);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_visible(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_value
+) {
+  return get_bool(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_VISIBLE, out_value);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_kitty_keyboard_flags(
+  const libghostty_cpp_terminal* terminal,
+  uint8_t* out_value
+) {
+  if (terminal == NULL || out_value == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  return libghostty_cpp_translate_result(
+    ghostty_terminal_get(terminal->inner, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, out_value)
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_cursor_style(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_style* out_style
+) {
+  if (terminal == NULL || out_style == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+  const GhosttyResult result = ghostty_terminal_get(
+    terminal->inner,
+    GHOSTTY_TERMINAL_DATA_CURSOR_STYLE,
+    &style
+  );
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  return translate_style(style, out_style);
+}
+
 libghostty_cpp_result libghostty_cpp_terminal_mouse_tracking(
   const libghostty_cpp_terminal* terminal,
   bool* out_value
@@ -731,6 +1065,158 @@ libghostty_cpp_result libghostty_cpp_terminal_scrollback_rows(
   );
 }
 
+libghostty_cpp_result libghostty_cpp_terminal_width_px(
+  const libghostty_cpp_terminal* terminal,
+  uint32_t* out_width_px
+) {
+  return get_u32(terminal, GHOSTTY_TERMINAL_DATA_WIDTH_PX, out_width_px);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_height_px(
+  const libghostty_cpp_terminal* terminal,
+  uint32_t* out_height_px
+) {
+  return get_u32(terminal, GHOSTTY_TERMINAL_DATA_HEIGHT_PX, out_height_px);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_foreground(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_foreground_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND_DEFAULT,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_background(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_BACKGROUND,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_background_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_BACKGROUND_DEFAULT,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_cursor(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_CURSOR,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_cursor_default(
+  const libghostty_cpp_terminal* terminal,
+  bool* out_has_value,
+  libghostty_cpp_rgb_color* out_color
+) {
+  return get_optional_color(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_CURSOR_DEFAULT,
+    out_has_value,
+    out_color
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_palette(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_rgb_color* out_palette
+) {
+  return get_palette(terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, out_palette);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_color_palette_default(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_rgb_color* out_palette
+) {
+  return get_palette(
+    terminal,
+    GHOSTTY_TERMINAL_DATA_COLOR_PALETTE_DEFAULT,
+    out_palette
+  );
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_title(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_string* title
+) {
+  return set_string_option(terminal, GHOSTTY_TERMINAL_OPT_TITLE, title);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_pwd(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_string* pwd
+) {
+  return set_string_option(terminal, GHOSTTY_TERMINAL_OPT_PWD, pwd);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_foreground_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+) {
+  return set_optional_color_option(terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, color);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_background_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+) {
+  return set_optional_color_option(terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, color);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_cursor_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* color
+) {
+  return set_optional_color_option(terminal, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, color);
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_set_color_palette_default(
+  libghostty_cpp_terminal* terminal,
+  const libghostty_cpp_rgb_color* colors
+) {
+  return set_palette_option(terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, colors);
+}
+
 libghostty_cpp_result libghostty_cpp_terminal_grid_ref_snapshot(
   const libghostty_cpp_terminal* terminal,
   libghostty_cpp_point point,
@@ -797,6 +1283,80 @@ libghostty_cpp_result libghostty_cpp_terminal_grid_ref_snapshot(
   }
 
   return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_row(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint64_t* out_row
+) {
+  if (out_row == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  GhosttyRow row = 0;
+  const GhosttyResult result = ghostty_grid_ref_row(&ref, &row);
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  *out_row = (uint64_t) row;
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_cell(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  uint64_t* out_cell
+) {
+  if (out_cell == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  GhosttyCell cell = 0;
+  const GhosttyResult result = ghostty_grid_ref_cell(&ref, &cell);
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  *out_cell = (uint64_t) cell;
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
+}
+
+libghostty_cpp_result libghostty_cpp_terminal_grid_ref_style(
+  const libghostty_cpp_terminal* terminal,
+  libghostty_cpp_point point,
+  libghostty_cpp_style* out_style
+) {
+  if (out_style == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  GhosttyGridRef ref = GHOSTTY_INIT_SIZED(GhosttyGridRef);
+  const libghostty_cpp_result ref_result = resolve_grid_ref(terminal, point, &ref);
+  if (ref_result != LIBGHOSTTY_CPP_RESULT_SUCCESS) {
+    return ref_result;
+  }
+
+  GhosttyStyle style = GHOSTTY_INIT_SIZED(GhosttyStyle);
+  const GhosttyResult result = ghostty_grid_ref_style(&ref, &style);
+  if (result != GHOSTTY_SUCCESS) {
+    return libghostty_cpp_translate_result(result);
+  }
+
+  return translate_style(style, out_style);
 }
 
 libghostty_cpp_result libghostty_cpp_terminal_grid_ref_graphemes_len(
