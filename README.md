@@ -48,26 +48,41 @@ If Qt6 Core, Gui, and Widgets are available, it is built automatically as part o
 cmake --build build --target ghostling_cpp
 ```
 
-## API Sketch
+## Quick Start
 
 ```cpp
-#include "libghostty_cpp/focus.hpp"
-#include "libghostty_cpp/fmt.hpp"
-#include "libghostty_cpp/paste.hpp"
 #include "libghostty_cpp/terminal.hpp"
+#include "libghostty_cpp/render.hpp"
 
-libghostty_cpp::Terminal terminal(libghostty_cpp::GridSize{80, 24}, 1000);
-terminal.resize(libghostty_cpp::GridSize{80, 24}, libghostty_cpp::CellSize{9, 18});
-terminal.vt_write(libghostty_cpp::ByteView{"hello from ghostty"});
+#include <cstdio>
 
-const auto focus = libghostty_cpp::focus::encode(libghostty_cpp::focus::Event::Gained);
-const auto paste = libghostty_cpp::paste::encode("printf 'hi'\n", true);
-const std::string title = terminal.title();
+int main() {
+    // Create a terminal with 80 columns, 24 rows, and scrollback.
+    libghostty_cpp::Terminal terminal({80, 24, 10'000});
 
-libghostty_cpp::fmt::Formatter formatter(
-  terminal,
-  libghostty_cpp::fmt::FormatterOptions{libghostty_cpp::fmt::Format::Plain, false, false}
-);
+    // Register an effect handler for PTY write-back (e.g. query responses).
+    terminal.on_pty_write([](const libghostty_cpp::Terminal&, libghostty_cpp::ByteView data) {
+        std::printf("PTY response: %zu bytes\n", data.size);
+    });
 
-const std::string snapshot = formatter.format_string();
+    // Feed VT-encoded data into the terminal.
+    terminal.vt_write(libghostty_cpp::ByteView{"Hello, \x1b[1;32mworld\x1b[0m!\r\n"});
+    terminal.vt_write(libghostty_cpp::ByteView{"\x1b[38;2;255;128;0morange text\x1b[0m\r\n"});
+
+    // Capture a render snapshot and iterate rows/cells.
+    libghostty_cpp::RenderState render_state;
+    libghostty_cpp::RowIterator rows;
+    libghostty_cpp::CellIterator cells;
+
+    render_state.update(terminal);
+    rows.bind(render_state);
+
+    while (rows.next()) {
+        cells.bind(rows);
+        while (cells.next()) {
+            const auto graphemes = cells.graphemes();
+            // … render each cell
+        }
+    }
+}
 ```
