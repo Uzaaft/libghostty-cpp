@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Set up MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Install
+        run: cmake --install build --prefix "$PWD/stage"
+
+      - name: Compute artifact name
+        id: artifact
+        run: |
+          os_name=$(printf '%s' "$RUNNER_OS" | tr '[:upper:]' '[:lower:]')
+          arch_name=$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
+          version_name=${GITHUB_REF_NAME:-manual}
+          echo "stem=libghostty-cpp-${version_name}-${os_name}-${arch_name}" >> "$GITHUB_OUTPUT"
+
+      - name: Create tarball
+        if: runner.os != 'Windows'
+        run: tar -C stage -czf "${{ steps.artifact.outputs.stem }}.tar.gz" .
+
+      - name: Create zip archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path stage\* -DestinationPath "${{ steps.artifact.outputs.stem }}.zip"
+
+      - name: Upload tarball
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.artifact.outputs.stem }}
+          path: ${{ steps.artifact.outputs.stem }}.tar.gz
+
+      - name: Upload zip archive
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ steps.artifact.outputs.stem }}
+          path: ${{ steps.artifact.outputs.stem }}.zip
+
+  publish:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download packaged artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
