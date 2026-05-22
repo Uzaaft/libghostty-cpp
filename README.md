@@ -16,6 +16,9 @@ Current wrapper coverage:
 - `osc` streaming parser for operating system command sequences
 - `sgr` parser for typed SGR attribute decoding
 - `fmt` formatter for plain text, VT, and HTML exports from terminal state
+- Kitty graphics image and placement helpers, including aggregate image info,
+  placement info, render sizing, source rectangles, viewport positions, and
+  placement bounding rectangles
 
 The public entry points are the headers under `include/libghostty_cpp/`. Most terminal-facing APIs are available through `terminal.hpp` or `vt.hpp`.
 
@@ -25,7 +28,7 @@ Requirements:
 
 - [CMake](https://cmake.org/) 3.19+
 - [Ninja](https://ninja-build.org/)
-- A C++ compiler with C++17 support
+- A C++ compiler with C++20 support
 - [Zig](https://ziglang.org/) 0.15.x on `PATH` (`flake.nix` pins `0.15.2`)
 - `git` for CMake `FetchContent`
 - macOS: Command Line Tools or Xcode
@@ -37,6 +40,25 @@ ctest --test-dir build --output-on-failure
 ```
 
 The Ghostty dependency is pinned to commit `0a492fdb331f1e0be29aedbcc78c3c852cb437f2`, which matches the currently targeted `libghostty-rs` API generation.
+
+## Kitty Graphics
+
+The Kitty graphics wrapper exposes typed image and placement views from
+Ghostty's terminal state. Images and placements are non-owning handles into the
+terminal, so callers should treat values returned from `Graphics::find_image`
+and `PlacementIterator::next` as render-pass scoped.
+
+`Image::info()` returns image metadata plus a `ByteView` for the decoded image
+data. That byte view is borrowed from Ghostty-owned storage and is invalidated
+when the terminal mutates, resets, or is destroyed. Copy the bytes if they must
+outlive the current render pass.
+
+`Placement::render_info()` groups the placement calculations commonly needed by
+renderers: rendered pixel size, grid size, optional viewport position, source
+rectangle, and optional bounding rectangle. Bounding rectangles use the same
+`Point::Kind` coordinate spaces as terminal grid references, so callers can ask
+for viewport, active, screen, or history-relative coordinates without learning
+the C ABI tags.
 
 ## Optional Example
 
