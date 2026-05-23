@@ -426,6 +426,7 @@ public:
 
   void vt_write(ByteView data);
   void vt_write(std::string_view data);
+  void vt_write(std::u8string_view data);
   void reset() noexcept;
   [[nodiscard]] bool mode(Mode mode) const;
   [[nodiscard]] bool is_mode_enabled(Mode mode) const;

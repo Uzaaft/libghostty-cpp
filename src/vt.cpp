@@ -648,6 +648,10 @@ void Terminal::vt_write(std::string_view data) {
   vt_write(ByteView(data));
 }
 
+void Terminal::vt_write(std::u8string_view data) {
+  vt_write(ByteView(data));
+}
+
 void Terminal::reset() noexcept {
   libghostty_cpp_terminal_reset(handle_);
 }

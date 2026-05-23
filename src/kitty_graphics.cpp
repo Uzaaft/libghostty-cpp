@@ -83,6 +83,40 @@ GhosttyKittyPlacementLayer translate_layer(PlacementLayer layer) {
   throw Error(ErrorCode::InvalidValue);
 }
 
+GhosttyPointTag translate_point_kind(Point::Kind point_kind) {
+  switch (point_kind) {
+    case Point::Kind::Active:
+      return GHOSTTY_POINT_TAG_ACTIVE;
+    case Point::Kind::Viewport:
+      return GHOSTTY_POINT_TAG_VIEWPORT;
+    case Point::Kind::Screen:
+      return GHOSTTY_POINT_TAG_SCREEN;
+    case Point::Kind::History:
+      return GHOSTTY_POINT_TAG_HISTORY;
+  }
+
+  throw Error(ErrorCode::InvalidValue);
+}
+
+std::optional<PointCoordinate> point_from_grid_ref(
+  GhosttyTerminal terminal,
+  const GhosttyGridRef& ref,
+  Point::Kind point_kind
+) {
+  GhosttyPointCoordinate coordinate = {};
+  const GhosttyResult result = ghostty_terminal_point_from_grid_ref(
+    terminal,
+    &ref,
+    translate_point_kind(point_kind),
+    &coordinate
+  );
+  if (result == GHOSTTY_NO_VALUE) {
+    return std::nullopt;
+  }
+  detail::throw_if_ghostty_error(result);
+  return PointCoordinate{.x = coordinate.x, .y = coordinate.y};
+}
+
 ImageFormat translate_image_format(GhosttyKittyImageFormat format) {
   switch (format) {
     case GHOSTTY_KITTY_IMAGE_FORMAT_RGB:
@@ -166,6 +200,19 @@ Compression Image::compression() const {
 ByteView Image::bytes() const {
   ensure_handle();
   return get_image_bytes(as_image(handle_));
+}
+
+ImageInfo Image::info() const {
+  ensure_handle();
+  return ImageInfo{
+    .id = id(),
+    .number = number(),
+    .width = width(),
+    .height = height(),
+    .format = format(),
+    .compression = compression(),
+    .bytes = bytes(),
+  };
 }
 
 // --- Placement ---
@@ -266,6 +313,23 @@ std::int32_t Placement::z() const {
   return value;
 }
 
+PlacementInfo Placement::info() const {
+  return PlacementInfo{
+    .image_id = image_id(),
+    .placement_id = placement_id(),
+    .is_virtual = is_virtual(),
+    .x_offset = x_offset(),
+    .y_offset = y_offset(),
+    .source_x = source_x(),
+    .source_y = source_y(),
+    .source_width = source_width(),
+    .source_height = source_height(),
+    .columns = columns(),
+    .rows = rows(),
+    .z = z(),
+  };
+}
+
 PixelSize Placement::pixel_size(
   const Image& image,
   const Terminal& terminal
@@ -336,6 +400,60 @@ SourceRect Placement::source_rect(const Image& image) const {
     )
   );
   return SourceRect{x, y, w, h};
+}
+
+std::optional<Selection> Placement::rect(
+  const Image& image,
+  const Terminal& terminal,
+  Point::Kind point_kind
+) const {
+  image.ensure_handle();
+  GhosttySelection selection = {};
+  selection.size = sizeof(GhosttySelection);
+  const GhosttyResult result = ghostty_kitty_graphics_placement_rect(
+    as_iterator(handle()),
+    as_image(image.handle_),
+    terminal.handle_->inner,
+    &selection
+  );
+  if (result == GHOSTTY_NO_VALUE) {
+    return std::nullopt;
+  }
+  detail::throw_if_ghostty_error(result);
+
+  const std::optional<PointCoordinate> start = point_from_grid_ref(
+    terminal.handle_->inner,
+    selection.start,
+    point_kind
+  );
+  const std::optional<PointCoordinate> end = point_from_grid_ref(
+    terminal.handle_->inner,
+    selection.end,
+    point_kind
+  );
+  if (!start.has_value() || !end.has_value()) {
+    return std::nullopt;
+  }
+
+  return Selection{
+    .start = start.value(),
+    .end = end.value(),
+    .rectangle = selection.rectangle,
+  };
+}
+
+PlacementRenderInfo Placement::render_info(
+  const Image& image,
+  const Terminal& terminal,
+  Point::Kind point_kind
+) const {
+  return PlacementRenderInfo{
+    .pixel_size = pixel_size(image, terminal),
+    .grid_size = grid_size(image, terminal),
+    .viewport_pos = viewport_pos(image, terminal),
+    .source_rect = source_rect(image),
+    .rect = rect(image, terminal, point_kind),
+  };
 }
 
 // --- PlacementIterator ---

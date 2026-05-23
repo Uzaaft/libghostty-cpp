@@ -21,6 +21,9 @@ struct ByteView {
   ByteView(std::string_view text) noexcept
       : data(reinterpret_cast<const std::uint8_t*>(text.data())), size(text.size()) {}
 
+  ByteView(std::u8string_view text) noexcept
+      : data(reinterpret_cast<const std::uint8_t*>(text.data())), size(text.size()) {}
+
   [[nodiscard]] bool empty() const noexcept {
     return size == 0;
   }
