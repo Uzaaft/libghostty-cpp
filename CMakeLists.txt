@@ -130,6 +130,11 @@ if(LIBGHOSTTY_CPP_BUILD_EXAMPLES)
     example/key/main.cpp
   )
 
+  add_executable(
+    libghostty_cpp_mouse_example
+    example/mouse/main.cpp
+  )
+
   target_link_libraries(
     libghostty_cpp_build_info_example
     PRIVATE
@@ -144,6 +149,12 @@ if(LIBGHOSTTY_CPP_BUILD_EXAMPLES)
 
   target_link_libraries(
     libghostty_cpp_key_example
+    PRIVATE
+      libghostty_cpp
+  )
+
+  target_link_libraries(
+    libghostty_cpp_mouse_example
     PRIVATE
       libghostty_cpp
   )
