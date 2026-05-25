@@ -97,7 +97,7 @@ set(libghostty_cpp_install_cmakedir
 option(
   LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP
   "Build the ghostling_cpp Qt Widgets tech demo"
-  ON
+  OFF
 )
 
 if(LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP AND UNIX)
@@ -135,6 +135,19 @@ if(LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP AND UNIX)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               ${CMAKE_CURRENT_SOURCE_DIR}/example/ghostling_cpp/fonts/OFL.txt
               $<TARGET_FILE_DIR:ghostling_cpp>/OFL.txt
+    )
+
+    install(
+      TARGETS ghostling_cpp
+      RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+
+    install(
+      FILES
+        example/ghostling_cpp/fonts/JetBrainsMono-Medium.ttf
+        example/ghostling_cpp/fonts/JetBrainsMono-Regular.ttf
+        example/ghostling_cpp/fonts/OFL.txt
+      DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
   else()
     message(STATUS "Skipping ghostling_cpp: Qt6 Core/Gui/Widgets not found")

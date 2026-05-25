@@ -39,7 +39,13 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-The Ghostty dependency is pinned to commit `0a492fdb331f1e0be29aedbcc78c3c852cb437f2`, which matches the currently targeted `libghostty-rs` API generation.
+With Nix, the default flake package builds the library:
+
+```sh
+nix build
+```
+
+The Ghostty dependency is pinned to commit `cb28160b5a2fd32d2e1cfeefb01d4297dbca8b18`, which matches the currently targeted `libghostty-rs` API generation.
 
 ## Kitty Graphics
 
@@ -64,10 +70,17 @@ the C ABI tags.
 
 `ghostling_cpp` is a Qt Widgets tech demo that exercises the higher-level wrappers, including key, mouse, focus, title, render, and bracketed paste handling.
 
-If Qt6 Core, Gui, and Widgets are available, it is built automatically as part of the default build. You can also build it explicitly with:
+It is disabled by default so the normal build produces the library. If Qt6 Core, Gui, and Widgets are available, build it explicitly with:
 
 ```sh
+cmake -B build -G Ninja -DLIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP=ON
 cmake --build build --target ghostling_cpp
+```
+
+With Nix, run the demo with:
+
+```sh
+nix run .#ghostling
 ```
 
 ## Quick Start
