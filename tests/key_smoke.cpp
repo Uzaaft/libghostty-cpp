@@ -43,6 +43,10 @@ int main() {
   encoder.set_options_from_terminal(terminal);
   assert(encoder.required_size(event) == 1);
 
+  const std::vector<std::uint8_t> owned_printable = encoder.encode(event);
+  assert(owned_printable.size() == 1);
+  assert(owned_printable[0] == static_cast<std::uint8_t>('A'));
+
   std::array<std::uint8_t, 1> printable = {};
   assert(encoder.encode(event, printable.data(), printable.size()) == 1);
   assert(printable[0] == static_cast<std::uint8_t>('A'));
