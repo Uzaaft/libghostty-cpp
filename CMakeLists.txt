@@ -109,6 +109,25 @@ set(libghostty_cpp_install_cmakedir
     "${CMAKE_INSTALL_LIBDIR}/cmake/libghostty_cpp")
 
 option(
+  LIBGHOSTTY_CPP_BUILD_EXAMPLES
+  "Build libghostty_cpp example programs"
+  OFF
+)
+
+if(LIBGHOSTTY_CPP_BUILD_EXAMPLES)
+  add_executable(
+    libghostty_cpp_build_info_example
+    example/build_info/main.cpp
+  )
+
+  target_link_libraries(
+    libghostty_cpp_build_info_example
+    PRIVATE
+      libghostty_cpp
+  )
+endif()
+
+option(
   LIBGHOSTTY_CPP_BUILD_GHOSTLING_CPP
   "Build the ghostling_cpp Qt Widgets tech demo"
   OFF
