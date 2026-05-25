@@ -120,8 +120,19 @@ if(LIBGHOSTTY_CPP_BUILD_EXAMPLES)
     example/build_info/main.cpp
   )
 
+  add_executable(
+    libghostty_cpp_focus_example
+    example/focus/main.cpp
+  )
+
   target_link_libraries(
     libghostty_cpp_build_info_example
+    PRIVATE
+      libghostty_cpp
+  )
+
+  target_link_libraries(
+    libghostty_cpp_focus_example
     PRIVATE
       libghostty_cpp
   )
