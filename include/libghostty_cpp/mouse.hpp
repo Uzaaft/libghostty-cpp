@@ -97,6 +97,7 @@ public:
     std::uint8_t* output,
     std::size_t output_size
   ) const;
+  [[nodiscard]] std::vector<std::uint8_t> encode(const Event& event) const;
   void encode_to(std::vector<std::uint8_t>& output, const Event& event) const;
 
 private:

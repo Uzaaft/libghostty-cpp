@@ -47,6 +47,12 @@ int main() {
 
   assert(encoder.required_size(press_event) == 9);
 
+  const std::vector<std::uint8_t> owned = encoder.encode(press_event);
+  assert(std::string_view(
+           reinterpret_cast<const char*>(owned.data()),
+           owned.size()
+         ) == "\x1B[<4;1;1M");
+
   std::array<std::uint8_t, 9> fixed = {};
   const std::size_t written = encoder.encode(press_event, fixed.data(), fixed.size());
   assert(written == 9);

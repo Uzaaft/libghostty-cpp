@@ -150,6 +150,12 @@ std::size_t Encoder::encode(
   return written;
 }
 
+std::vector<std::uint8_t> Encoder::encode(const Event& event) const {
+  std::vector<std::uint8_t> output;
+  encode_to(output, event);
+  return output;
+}
+
 void Encoder::encode_to(
   std::vector<std::uint8_t>& output,
   const Event& event
