@@ -18,8 +18,8 @@ include(FetchContent)
 
 # --- libghostty-vt -----------------------------------------------------------
 # Virtual terminal emulator library from Ghostty. Requires `zig` on PATH.
-# The Ghostty CMakeLists.txt delegates to `zig build lib-vt` to produce the
-# shared library. See https://ghostty.org/docs/install/build for the
+# The Ghostty CMakeLists.txt delegates to `zig build -Demit-lib-vt` to produce
+# shared and static libraries. See https://ghostty.org/docs/install/build for the
 # required Zig version.
 FetchContent_Declare(
   ghostty
@@ -27,6 +27,20 @@ FetchContent_Declare(
   GIT_TAG cb28160b5a2fd32d2e1cfeefb01d4297dbca8b18
 )
 FetchContent_MakeAvailable(ghostty)
+
+option(
+  LIBGHOSTTY_CPP_LINK_GHOSTTY_STATIC
+  "Link libghostty_cpp to the static libghostty-vt library"
+  OFF
+)
+
+if(LIBGHOSTTY_CPP_LINK_GHOSTTY_STATIC)
+  set(libghostty_cpp_ghostty_vt_build_target ghostty-vt-static)
+  set(libghostty_cpp_ghostty_vt_install_target ghostty-vt::ghostty-vt-static)
+else()
+  set(libghostty_cpp_ghostty_vt_build_target ghostty-vt)
+  set(libghostty_cpp_ghostty_vt_install_target ghostty-vt::ghostty-vt)
+endif()
 
 add_library(
   libghostty_cpp
@@ -87,8 +101,8 @@ target_include_directories(
 target_link_libraries(
   libghostty_cpp
   PUBLIC
-    $<BUILD_INTERFACE:ghostty-vt>
-    $<INSTALL_INTERFACE:ghostty-vt::ghostty-vt>
+    $<BUILD_INTERFACE:${libghostty_cpp_ghostty_vt_build_target}>
+    $<INSTALL_INTERFACE:${libghostty_cpp_ghostty_vt_install_target}>
 )
 
 set(libghostty_cpp_install_cmakedir

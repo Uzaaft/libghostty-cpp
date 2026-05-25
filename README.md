@@ -39,6 +39,14 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+By default, `libghostty_cpp` links to the shared `libghostty-vt` library. To
+link against the static `libghostty-vt` archive instead, configure with:
+
+```sh
+cmake -B build -G Ninja -DLIBGHOSTTY_CPP_LINK_GHOSTTY_STATIC=ON
+cmake --build build
+```
+
 With Nix, the default flake package builds the library:
 
 ```sh
