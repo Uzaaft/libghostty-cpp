@@ -300,7 +300,12 @@ libghostty_cpp_result libghostty_cpp_key_event_get_key(
   const libghostty_cpp_key_event* event,
   libghostty_cpp_key_value* out_key
 ) {
-  return get_key_u32(event, ghostty_key_event_get_key, out_key);
+  if (event == NULL || out_key == NULL) {
+    return LIBGHOSTTY_CPP_RESULT_INVALID_VALUE;
+  }
+
+  *out_key = ghostty_key_event_get_key(event->inner);
+  return LIBGHOSTTY_CPP_RESULT_SUCCESS;
 }
 
 libghostty_cpp_result libghostty_cpp_key_event_set_mods(
