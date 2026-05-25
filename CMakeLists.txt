@@ -24,7 +24,7 @@ include(FetchContent)
 FetchContent_Declare(
   ghostty
   GIT_REPOSITORY https://github.com/ghostty-org/ghostty.git
-  GIT_TAG 853183e91
+  GIT_TAG cb28160b5a2fd32d2e1cfeefb01d4297dbca8b18
 )
 FetchContent_MakeAvailable(ghostty)
 
